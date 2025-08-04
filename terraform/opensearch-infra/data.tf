@@ -21,10 +21,26 @@ data "aws_subnets" "opensearch_subnets" {
 
   filter {
     name   = "tag:Name"
-    values = ["${local.base_prefix}-sagemaker*"]
+    values = ["${local.base_prefix}-endpoints*"]
   }
 }
 
 data "aws_iam_role" "opensearch_master_role" {
   name = local.opensearch_master_role_name
+}
+
+data "aws_security_group" "lambda_sg" {
+  filter {
+    name   = "tag:Name"
+    values = ["${local.base_prefix}-lambda-sg"]
+  }
+  vpc_id = data.aws_vpc.spoke_vpc.id
+}
+
+data "aws_security_group" "sagemaker_sg" {
+  filter {
+    name   = "tag:Name"
+    values = ["${local.base_prefix}-sagemaker-sg"]
+  }
+  vpc_id = data.aws_vpc.spoke_vpc.id
 }

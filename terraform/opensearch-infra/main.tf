@@ -9,7 +9,7 @@ resource "aws_security_group" "opensearch_sg" {
     from_port       = 443
     to_port         = 443
     protocol        = "tcp"
-    security_groups = ["${local.base_prefix}-lambda-sg"]
+    security_groups = [data.aws_security_group.lambda_sg.id]
   }
 
   # Allow HTTPS access from SageMaker security group
@@ -18,18 +18,10 @@ resource "aws_security_group" "opensearch_sg" {
     from_port       = 443
     to_port         = 443
     protocol        = "tcp"
-    security_groups = ["${local.base_prefix}-sagemaker-sg"]
+    security_groups = [data.aws_security_group.sagemaker_sg.id]
   }
 
-  # Deny all outbound traffic (no external access needed)
-  # Note: AWS creates default egress rule, we explicitly restrict it
-  egress {
-    description = "No outbound access"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = []
-  }
+  # No explicit egress rules - AWS default deny all outbound
 
   tags = merge(
     var.tags,

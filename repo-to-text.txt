@@ -1,0 +1,1235 @@
+<repo-to-text>
+Directory: terraform
+
+Directory Structure:
+<directory_structure>
+.
+.
+├── ./base
+│   ├── ./base/data.tf
+│   ├── ./base/endpoints
+│   │   ├── ./base/endpoints/data.tf
+│   │   ├── ./base/endpoints/main.tf
+│   │   └── ./base/endpoints/variables.tf
+│   ├── ./base/inputs
+│   │   └── ./base/inputs/sandbox
+│   │       └── ./base/inputs/sandbox/982534393096_46de60f5-2b31-4fb7-9cbf-b728d5b104e3.tfvars
+│   ├── ./base/locals.tf
+│   ├── ./base/main.tf
+│   ├── ./base/policies
+│   │   ├── ./base/policies/lambda
+│   │   │   ├── ./base/policies/lambda/ai.json.tpl
+│   │   │   ├── ./base/policies/lambda/base.json.tpl
+│   │   │   ├── ./base/policies/lambda/data.json.tpl
+│   │   │   ├── ./base/policies/lambda/monitoring.json.tpl
+│   │   │   └── ./base/policies/lambda/secret.json.tpl
+│   │   └── ./base/policies/sagemaker
+│   │       └── ./base/policies/sagemaker/sagemaker_custom.tpl
+│   ├── ./base/provider.tf
+│   ├── ./base/role_sagemaker.tf
+│   ├── ./base/roles_lambda.tf
+│   ├── ./base/s3_bucket
+│   │   ├── ./base/s3_bucket/byod_bucket.tf
+│   │   ├── ./base/s3_bucket/data.tf
+│   │   ├── ./base/s3_bucket/outputs.tf
+│   │   ├── ./base/s3_bucket/service_bucket.tf
+│   │   ├── ./base/s3_bucket/variables.tf
+│   │   └── ./base/s3_bucket/workspace_bucket.tf
+│   └── ./base/variables.tf
+└── ./sagemaker-infra
+    ├── ./sagemaker-infra/data.tf
+    ├── ./sagemaker-infra/inputs
+    │   └── ./sagemaker-infra/inputs/sandbox
+    │       └── ./sagemaker-infra/inputs/sandbox/982534393096_46de60f5-2b31-4fb7-9cbf-b728d5b104e3.tfvars
+    ├── ./sagemaker-infra/locals.tf
+    ├── ./sagemaker-infra/main.tf
+    ├── ./sagemaker-infra/outputs.tf
+    ├── ./sagemaker-infra/provider.tf
+    └── ./sagemaker-infra/variables.tf
+
+</directory_structure>
+
+<content full_path="sagemaker-infra/data.tf">
+data "aws_caller_identity" "current" {}
+
+data "aws_region" "current" {}
+
+data "aws_vpc" "spoke_vpc" {
+  filter {
+    name   = "tag:Name"
+    values = ["${local.base_prefix}-vpc"]
+  }
+}
+
+data "aws_kms_key" "base_kms_key" {
+  key_id = local.kms_key_alias
+}
+
+data "aws_subnets" "sagemaker_subnets" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.spoke_vpc.id]
+  }
+
+  filter {
+    name   = "tag:Name"
+    values = ["${local.base_prefix}-sagemaker*"]
+  }
+}
+
+data "aws_s3_bucket" "workspace_bucket" {
+  bucket = "${local.base_prefix}-workspace-bucket"
+}
+
+data "aws_s3_bucket" "byod_bucket" {
+  bucket = "${local.base_prefix}-byod-bucket"
+}
+
+data "aws_ecr_repository" "base_ecr" {
+  name = "${local.base_prefix}-ecr"
+}
+
+data "aws_iam_role" "sagemaker_domain_default_execution_role" {
+  name = local.sagemaker_role_name
+}
+
+</content>
+
+<content full_path="sagemaker-infra/outputs.tf">
+output "sagemaker_domain_id" {
+  value       = aws_sagemaker_domain.sagemaker_domain.id
+  description = "The ID of the created SageMaker domain"
+}
+</content>
+
+<content full_path="sagemaker-infra/locals.tf">
+locals {
+  optum_ip_whitelist = ["168.183.0.0/16", "149.111.0.0/16", "128.35.0.0/16", "161.249.0.0/16", "198.203.174.0/23",
+  "198.203.176.0/22", "198.203.180.0/23"]
+  resource_provisioner = "UAIS"
+  base_prefix          = "uais-${split("-", var.project_id)[0]}"
+  kms_key_alias        = "alias/${local.base_prefix}-kms-key"
+  sagemaker_role_name  = "${local.base_prefix}-sagemaker-domain-exec-role"
+}
+</content>
+
+<content full_path="sagemaker-infra/main.tf">
+resource "aws_security_group" "sagemaker_sg" {
+  name        = "${local.base_prefix}-sagemaker-sg"
+  description = "Allow certain NFS and TCP inbound traffic"
+  vpc_id      = data.aws_vpc.spoke_vpc.id
+
+  # restricting access from optum tower ips
+  ingress {
+    description = "Ingress access only with in optum tower ips"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = local.optum_ip_whitelist
+  }
+
+  ingress {
+    description = "NFS traffic over TCP on port 2049 between the domain and EFS volume"
+    from_port   = 2049
+    to_port     = 2049
+    protocol    = "tcp"
+    self        = true
+  }
+
+  ingress {
+    description = "TCP traffic between JupyterServer app and the KernelGateway apps"
+    from_port   = 8192
+    to_port     = 65535
+    protocol    = "tcp"
+    self        = true
+  }
+
+  # By default, AWS creates an ALLOW ALL egress rule when creating a new Security Group inside of a VPC.
+  # When creating a new Security Group inside a VPC, Terraform will remove this default rule,
+  # and require you specifically re-create it if you desire that rule.
+  egress {
+    description      = "Allow outbound traffic"
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1" # semantically equivalent to all ports
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+  }
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+      name       = "${local.base_prefix}-sagemaker-sg"
+    }
+  )
+}
+
+resource "aws_sagemaker_domain" "sagemaker_domain" {
+  domain_name             = "${local.base_prefix}-sagemaker-domain"
+  app_network_access_type = var.app_network_access_type
+  auth_mode               = var.auth_mode
+  vpc_id                  = data.aws_vpc.spoke_vpc.id
+  subnet_ids              = data.aws_subnets.sagemaker_subnets.ids
+  kms_key_id              = data.aws_kms_key.base_kms_key.arn
+
+  default_space_settings {
+    execution_role = data.aws_iam_role.sagemaker_domain_default_execution_role.arn
+  }
+
+  default_user_settings {
+    execution_role    = data.aws_iam_role.sagemaker_domain_default_execution_role.arn
+    studio_web_portal = "ENABLED"
+    sharing_settings {
+      notebook_output_option = "Allowed"
+      s3_kms_key_id          = data.aws_kms_key.base_kms_key.arn
+      s3_output_path         = "s3://${data.aws_s3_bucket.workspace_bucket.id}/shared-notebooks"
+    }
+  }
+
+  domain_settings {
+    security_group_ids = [aws_security_group.sagemaker_sg.id]
+  }
+
+  retention_policy {
+    home_efs_file_system = "Retain"
+  }
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+      name       = "${local.base_prefix}-sagemaker-domain"
+    }
+  )
+}
+
+resource "aws_sagemaker_user_profile" "default_user" {
+  for_each = toset(var.user_profile_names)
+
+  domain_id         = aws_sagemaker_domain.sagemaker_domain.id
+  user_profile_name = each.value
+
+  user_settings {
+    execution_role  = data.aws_iam_role.sagemaker_domain_default_execution_role.arn
+    security_groups = [aws_security_group.sagemaker_sg.id]
+  }
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+      username   = each.value
+    }
+  )
+}
+</content>
+
+<content full_path="sagemaker-infra/variables.tf">
+variable "aws_region" {
+  description = "AWS Region."
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "project_id" {
+  description = "UAIS Project ID tied to the workspace"
+  type        = string
+}
+
+variable "tags" {
+  type        = map(string)
+  description = "Tags to apply to resources."
+}
+
+variable "aws_account_id" {
+  description = "AWS Account ID"
+  type        = string
+}
+
+variable "auth_mode" {
+  description = "The mode of authentication that members use to access the domain. Valid values are IAM and SSO"
+  type        = string
+  default     = "IAM"
+}
+
+variable "app_network_access_type" {
+  description = "The network access type for the App domain. Valid values are PublicInternetOnly and VpcOnly"
+  type        = string
+  default     = "VpcOnly"
+}
+
+variable "user_profile_names" {
+  type    = list(string)
+  default = ["defaultuser"] # Replace with your actual list of user profile names
+}
+
+variable "enable_bedrock_access" {
+  description = "Enable Bedrock access for the Sagemaker domain"
+  type        = bool
+  default     = false
+}
+</content>
+
+<content full_path="sagemaker-infra/provider.tf">
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+#   backend "s3" {
+#     access_key = ""
+#     secret_key = ""
+#     token      = ""
+#     bucket     = ""
+#     key        = ""
+#     region     = ""
+#   }
+}
+
+provider "aws" {
+
+  #   access_key = var.aws_access_key
+  #   secret_key = var.aws_secret_key
+  region = var.aws_region
+  #
+  #   assume_role {
+  #     role_arn = "arn:aws:iam::${var.aws_account_id}:role/uais_admin_access_role"
+  #   }
+}
+</content>
+
+<content full_path="sagemaker-infra/inputs/sandbox/982534393096_46de60f5-2b31-4fb7-9cbf-b728d5b104e3.tfvars">
+aws_region     = "us-east-1"
+aws_account_id = "982534393096"
+project_id     = "46de60f5-2b31-4fb7-9cbf-b728d5b104e3"
+
+tags = {
+  "project_id"   = "46de60f5-2b31-4fb7-9cbf-b728d5b104e3",
+  "aide-id"      = "AIDE_0074310"
+  "hcp_rg"       = "migration-aide-0074310-4416a57",
+  "environment"  = "dev",
+  "service-tier" = "p2"
+}
+
+enable_bedrock_access = true
+</content>
+
+<content full_path="base/role_sagemaker.tf">
+resource "aws_iam_role" "sagemaker_domain_default_execution_role" {
+  name               = "${local.base_prefix}-sagemaker-domain-exec-role"
+  path               = "/"
+  assume_role_policy = data.aws_iam_policy_document.sagemaker_domain_assume_role_policy.json
+}
+
+# Allows access to sagemaker s3 get, put and list
+# Allows access to sagemaker ecr get, put,
+# Allows only model training and block all model deployment activities
+resource "aws_iam_policy" "sagemaker_execution_policy" {
+  name        = local.sagemaker_policy_name
+  description = "Policy to allow model training in SageMaker, access to specified S3 and ECR resources"
+  policy      = local.sagemaker_policy
+}
+
+resource "aws_iam_role_policy_attachment" "attach_policy" {
+  role       = aws_iam_role.sagemaker_domain_default_execution_role.name
+  policy_arn = aws_iam_policy.sagemaker_execution_policy.arn
+}
+
+# Attaching the AmazonSageMakerFullAccess policy to the SageMaker execution role
+# Model creation and deployment is blocked by the custom deny policy above
+resource "aws_iam_role_policy_attachment" "attach_sagemaker_policy" {
+  role       = aws_iam_role.sagemaker_domain_default_execution_role.name
+  policy_arn = data.aws_iam_policy.AmazonSageMakerFullAccess.arn
+}
+
+resource "aws_iam_role_policy_attachment" "attach_sagemaker_canvas_policy" {
+  role       = aws_iam_role.sagemaker_domain_default_execution_role.name
+  policy_arn = data.aws_iam_policy.AmazonSageMakerCanvasFullAccess.arn
+}
+
+resource "aws_iam_role_policy_attachment" "attach_sagemaker_canvas_services_policy" {
+  role       = aws_iam_role.sagemaker_domain_default_execution_role.name
+  policy_arn = data.aws_iam_policy.AmazonSageMakerCanvasAIServicesAccess.arn
+}
+
+resource "aws_iam_role_policy_attachment" "attach_bedrock_policy" {
+  role       = aws_iam_role.sagemaker_domain_default_execution_role.name
+  policy_arn = data.aws_iam_policy.bedrock_full_access.arn
+}
+</content>
+
+<content full_path="base/data.tf">
+data "aws_caller_identity" "current" {}
+
+data "aws_region" "current" {}
+
+# Sagemaker specific data blocks
+data "aws_iam_policy" "bedrock_full_access" {
+  name = "AmazonBedrockFullAccess"
+}
+
+data "aws_iam_policy" "AmazonSageMakerFullAccess" {
+  name = "AmazonSageMakerFullAccess"
+}
+
+data "aws_iam_policy" "AmazonSageMakerCanvasFullAccess" {
+  name = "AmazonSageMakerCanvasFullAccess"
+}
+
+data "aws_iam_policy" "AmazonSageMakerCanvasAIServicesAccess" {
+  name = "AmazonSageMakerCanvasAIServicesAccess"
+}
+
+data "aws_iam_policy_document" "sagemaker_domain_assume_role_policy" {
+  statement {
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["sagemaker.amazonaws.com"]
+    }
+  }
+}
+
+</content>
+
+<content full_path="base/locals.tf">
+locals {
+  optum_ip_whitelist = ["168.183.0.0/16", "149.111.0.0/16", "128.35.0.0/16", "161.249.0.0/16", "198.203.174.0/23",
+  "198.203.176.0/22", "198.203.180.0/23"]
+  resource_provisioner = "UAIS"
+  base_prefix          = "uais-${split("-", var.project_id)[0]}"
+  kms_key_alias        = "alias/${local.base_prefix}-kms-key"
+
+  # Generic Policy locals
+  policy_template_path = "${path.module}/policies"
+  policy_arn_prefix = "arn:aws:%s:${var.aws_region}:${var.aws_account_id}"
+
+  # Lambda Policy locals
+
+  policy_lambda_template_path = "${local.policy_template_path}/lambda"
+
+  policy_lambda_base_name = "${local.base_prefix}-lambda-base-policy"
+  policy_lambda_data_name = "${local.base_prefix}-lambda-data-storage-policy"
+  policy_lambda_ai_name = "${local.base_prefix}-lambda-ai-services-policy"
+  policy_lambda_secret_name = "${local.base_prefix}-lambda-secret-config-policy"
+  policy_lambda_monitoring_name = "${local.base_prefix}-lambda-monitoring-policy"
+
+  policy_lambda_arn_ssm = format("${local.policy_arn_prefix}:parameter/params/lambda/${local.base_prefix}*", "ssm") # Eg: arn:aws:ssm:us-east-1:952189540345:parameter/params/lambda/uais-c6945420*
+  policy_lambda_arn_dynamodb = format("${local.policy_arn_prefix}:table/${local.base_prefix}-dynamodb*", "dynamodb") # Eg: arn:aws:dynamodb:us-east-1:952189540345:table/uais-b4854dd4-dynamodb*
+
+  lambda_policy_base = templatefile("${local.policy_lambda_template_path}/base.json.tpl", {})
+
+  lambda_policy_data = templatefile("${local.policy_lambda_template_path}/data.json.tpl", {
+    dynamodb_resource_arn = local.policy_lambda_arn_dynamodb
+  })
+
+  lambda_policy_secret = templatefile("${local.policy_lambda_template_path}/secret.json.tpl", {
+    param_store_resource_arn = local.policy_lambda_arn_ssm
+  })
+
+  lambda_policy_ai = templatefile("${local.policy_lambda_template_path}/ai.json.tpl", {
+    param_store_resource_arn = local.policy_lambda_arn_ssm
+  })
+
+  lambda_policy_monitoring = templatefile("${local.policy_lambda_template_path}/monitoring.json.tpl", {
+    param_store_resource_arn = local.policy_lambda_arn_ssm
+  })
+
+  sagemaker_policy_name = "${local.base_prefix}-sagemaker-execution-policy"
+  sagemaker_policy = templatefile("${path.module}/policies/sagemaker/sagemaker_custom.tpl", {
+    workspace_bucket_arn = module.s3_bucket.workspace_bucket_arn
+    byod_bucket_arn      = module.s3_bucket.byod_bucket_arn
+    base_ecr_arn         = aws_ecr_repository.base_ecr_repository.arn
+    sagemaker_role_arn   = aws_iam_role.sagemaker_domain_default_execution_role.arn
+    base_kms_arn         = aws_kms_key.base_kms_key.arn
+  })
+}
+</content>
+
+<content full_path="base/roles_lambda.tf">
+# The lambda policy for its execution
+resource "aws_iam_policy" "lambda_exec_policy_base" {
+  name        = local.policy_lambda_base_name
+  description = "The lambda policy for its execution"
+  policy      = local.lambda_policy_base
+}
+
+# The lambda policy for accessing data (eg: dynamodb, s3 etc.)
+resource "aws_iam_policy" "lambda_exec_policy_data" {
+  name        = local.policy_lambda_data_name
+  description = "The lambda exec policy for accessing data (eg: dynamodb, s3 etc.)"
+  policy      = local.lambda_policy_data
+}
+
+# The lambda policy for accessing ai services (eg: Bedrock, OSS, etc.)
+resource "aws_iam_policy" "lambda_exec_policy_ai" {
+  name        = local.policy_lambda_ai_name
+  description = "The lambda exec policy for accessing ai services (eg: Bedrock, OSS, etc.)"
+  policy      = local.lambda_policy_ai
+}
+
+# The lambda policy for accessing secrets (eg: KMS, Parameter Store, etc.)
+resource "aws_iam_policy" "lambda_exec_policy_secrets" {
+  name        = local.policy_lambda_secret_name
+  description = "The lambda policy for accessing secrets (eg: KMS, Parameter Store, etc.)"
+  policy      = local.lambda_policy_secret
+}
+
+# The lambda policy for accessing monitoring services (eg: cloudwatch, xray , etc.)
+resource "aws_iam_policy" "lambda_exec_policy_monitoring" {
+  name        = local.policy_lambda_monitoring_name
+  description = "The lambda policy for accessing monitoring services (eg: cloudwatch, xray , etc.)"
+  policy      = local.lambda_policy_monitoring
+}
+
+</content>
+
+<content full_path="base/main.tf">
+# Creates a vpc with subnets, route tables for the workspace.
+# Adds a tag np_ready_to_reroute to true for HCP scheduler to reroute traffic to firewall by adding a route to the route tables created.
+module "spoke_vpc" {
+  source     = "aws-ia/vpc/aws"
+  version    = "= 4.4.4"
+  name       = "${local.base_prefix}-vpc"
+  cidr_block = var.vpc.cidr_block
+  az_count   = var.vpc.number_azs
+  subnets = {
+    sagemaker_subnet = {
+      name_prefix = "${local.base_prefix}-sagemaker"
+      cidrs       = var.vpc.sagemaker_subnet_cidrs
+    }
+
+    endpoints_subnet = {
+      name_prefix = "${local.base_prefix}-endpoints"
+      cidrs       = var.vpc.endpoint_subnet_cidrs
+    }
+  }
+  tags = merge(
+    var.tags,
+    {
+      provisoner          = local.resource_provisioner
+      name                = "${local.base_prefix}-vpc"
+      np_ready_to_reroute = "true"
+    }
+  )
+}
+
+# Kms key which will be used for SSE encryption resources in this workspace.
+resource "aws_kms_key" "base_kms_key" {
+  description         = "KMS key used to encrypt S3 and workspace resources"
+  enable_key_rotation = true
+}
+
+resource "aws_kms_alias" "my_key_alias" {
+  name          = local.kms_key_alias
+  target_key_id = aws_kms_key.base_kms_key.key_id
+}
+
+resource "aws_kms_key_policy" "base_kms_key_policy" {
+  key_id = aws_kms_key.base_kms_key.id
+  policy = jsonencode({
+    Id = "base_worksapce_key_policy"
+    Statement = [
+      {
+        Action = "kms:*"
+        Effect = "Allow"
+        Principal = {
+          AWS = [
+            data.aws_caller_identity.current.account_id
+          ]
+        }
+        Resource = "*"
+        Sid      = "Enable all IAM role/user in this account to use this key"
+      },
+    ]
+    Version = "2012-10-17"
+  })
+}
+
+resource "aws_ecr_repository" "base_ecr_repository" {
+  name                 = "${local.base_prefix}-ecr"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+      name       = "${local.base_prefix}-ecr"
+    }
+  )
+}
+
+# Creates all s3 buckets required for this workspace.
+module "s3_bucket" {
+  source             = "./s3_bucket"
+  bucket_prefix      = local.base_prefix
+  kms_arn            = aws_kms_key.base_kms_key.arn
+  tower_ips          = local.optum_ip_whitelist
+  sagemaker_role_arn = aws_iam_role.sagemaker_domain_default_execution_role.arn
+  tags               = merge(var.tags, { provisoner = local.resource_provisioner })
+}
+
+# Creates all VPC endpoints to the endpoint_names as input required for this workspace.
+# Interface endpoints are created for passed services names.
+# Gateway endpoint is created for S3.
+module "vpc_endpoints" {
+  source         = "./endpoints"
+  vpc_name       = "${local.base_prefix}-vpc"
+  vpc            = module.spoke_vpc
+  vpc_cidr       = module.spoke_vpc.vpc_attributes.cidr_block
+  endpoint_names = var.endpoint_names
+  tags           = merge(var.tags, { provisoner = local.resource_provisioner })
+}
+</content>
+
+<content full_path="base/variables.tf">
+variable "aws_region" {
+  description = "AWS Region."
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "project_id" {
+  description = "UAIS Project ID tied to the workspace"
+  type        = string
+}
+
+variable "vpc" {
+  description = "Base workspace VPC definition."
+  type        = any
+}
+
+variable "endpoint_names" {
+  type        = list(string)
+  description = "List of VPC Endpoints Names to deploy"
+
+  default = ["sagemaker.api", "sagemaker.runtime", "sagemaker.featurestore-runtime", "sts", "ecr.dkr", "ecr.api"]
+}
+
+variable "tags" {
+  type        = map(string)
+  description = "Tags to apply to resources."
+}
+
+variable "aws_account_id" {
+  description = "AWS Account ID"
+  type        = string
+}
+</content>
+
+<content full_path="base/provider.tf">
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+#   backend "s3" {
+#     access_key = ""
+#     secret_key = ""
+#     token      = ""
+#     bucket     = ""
+#     key        = ""
+#     region     = ""
+#   }
+}
+
+provider "aws" {
+
+  #   access_key = var.aws_access_key
+  #   secret_key = var.aws_secret_key
+  region = var.aws_region
+  #
+  #   assume_role {
+  #     role_arn = "arn:aws:iam::${var.aws_account_id}:role/uais_admin_access_role"
+  #   }
+}
+</content>
+
+<content full_path="base/endpoints/data.tf">
+# Current AWS Region
+data "aws_region" "region" {}
+</content>
+
+<content full_path="base/endpoints/main.tf">
+# VPC endpoints
+resource "aws_vpc_endpoint" "endpoint" {
+  for_each = toset(var.endpoint_names)
+
+  vpc_id              = var.vpc.vpc_attributes.id
+  service_name        = "com.amazonaws.${data.aws_region.region.name}.${each.value}"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = values({ for k, v in var.vpc.private_subnet_attributes_by_az : split("/", k)[1] => v.id if split("/", k)[0] == "endpoints_subnet" })
+  security_group_ids  = [aws_security_group.endpoints_vpc_sg.id]
+  private_dns_enabled = true
+  tags                = var.tags
+}
+
+# Security Group
+resource "aws_security_group" "endpoints_vpc_sg" {
+  name        = "${var.vpc_name}-endpoints-security-group"
+  description = "VPC endpoint"
+  vpc_id      = var.vpc.vpc_attributes.id
+  tags        = var.tags
+}
+
+resource "aws_vpc_security_group_ingress_rule" "allowing_ingress_https" {
+  security_group_id = aws_security_group.endpoints_vpc_sg.id
+
+  from_port   = 443
+  to_port     = 443
+  ip_protocol = "tcp"
+  cidr_ipv4   = var.vpc.vpc_attributes.cidr_block
+  tags        = var.tags
+}
+
+resource "aws_vpc_endpoint" "vpc_s3_endpoint" {
+  vpc_id            = var.vpc.vpc_attributes.id
+  service_name      = "com.amazonaws.${data.aws_region.region.name}.s3"
+  vpc_endpoint_type = "Gateway"
+  tags              = var.tags
+}
+
+resource "aws_vpc_endpoint_route_table_association" "s3_vpce_route_table_association" {
+  for_each        = var.vpc.rt_attributes_by_type_by_az.private
+  route_table_id  = each.value.id
+  vpc_endpoint_id = aws_vpc_endpoint.vpc_s3_endpoint.id
+}
+</content>
+
+<content full_path="base/endpoints/variables.tf">
+variable "vpc_name" {
+  type        = string
+  description = "Name of the VPC where the EC2 instance(s) are created."
+}
+
+variable "vpc" {
+  type        = any
+  description = "VPC resources."
+}
+
+variable "vpc_cidr" {
+  type        = any
+  description = "VPC CIDR Block"
+}
+
+variable "endpoint_names" {
+  type        = list(string)
+  description = "VPC Endpoint Names"
+}
+
+variable "tags" {
+  type        = map(string)
+  description = "Tags to apply to resources."
+}
+</content>
+
+<content full_path="base/policies/lambda/base.json.tpl">
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ec2:CreateNetworkInterface",
+        "ec2:DescribeNetworkInterfaces",
+        "ec2:DeleteNetworkInterface"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+</content>
+
+<content full_path="base/policies/lambda/ai.json.tpl">
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "VisualEditor0",
+            "Effect": "Allow",
+            "Action": [
+                "ssm:GetParametersByPath",
+                "ssm:GetParameters",
+                "ssm:GetParameter"
+            ],
+            "Resource": "${param_store_resource_arn}"
+        }
+    ]
+}
+</content>
+
+<content full_path="base/policies/lambda/monitoring.json.tpl">
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "VisualEditor0",
+            "Effect": "Allow",
+            "Action": [
+                "ssm:GetParametersByPath",
+                "ssm:GetParameters",
+                "ssm:GetParameter"
+            ],
+            "Resource": "${param_store_resource_arn}"
+        }
+    ]
+}
+</content>
+
+<content full_path="base/policies/lambda/secret.json.tpl">
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "VisualEditor0",
+            "Effect": "Allow",
+            "Action": [
+                "ssm:GetParametersByPath",
+                "ssm:GetParameters",
+                "ssm:GetParameter"
+            ],
+            "Resource": "${param_store_resource_arn}"
+        }
+    ]
+}
+</content>
+
+<content full_path="base/policies/lambda/data.json.tpl">
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Effect": "Deny",
+			"Action": [
+				"dynamodb:DeleteResourcePolicy",
+				"dynamodb:PutResourcePolicy",
+				"dynamodb:UpdateAbacStatus"
+			],
+            "Resource": "${dynamodb_resource_arn}"
+		}
+	]
+}
+</content>
+
+<content full_path="base/policies/sagemaker/sagemaker_custom.tpl">
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowReadWriteDeleteAccessOnWorkspaceBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:Get*",
+        "s3:List*",
+        "s3:Describe*",
+        "s3:DeleteObject",
+        "s3:PutObject",
+        "s3:PutObjectAcl"
+      ],
+      "Resource": [
+        "${workspace_bucket_arn}",
+        "${workspace_bucket_arn}/*"
+      ]
+    },
+    {
+      "Sid": "AllowReadAccessOnByodBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:Get*",
+        "s3:List*",
+        "s3:Describe*"
+      ],
+      "Resource": [
+        "${byod_bucket_arn}",
+        "${byod_bucket_arn}/*"
+      ]
+    },
+    {
+      "Sid": "AllowReadWriteAccessOnWorkspaceEcr",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:BatchGetImage",
+        "ecr:PutImage",
+        "ecr:GetAuthorizationToken",
+        "ecr:DescribeImages"
+      ],
+      "Resource": "${base_ecr_arn}"
+    },
+    {
+      "Action": [
+        "kms:Decrypt",
+        "kms:GenerateDataKey",
+        "kms:CreateGrant"
+      ],
+      "Effect": "Allow",
+      "Resource": "${base_kms_arn}"
+    },
+    {
+      "Sid": "AllowPassRoleToSageMaker",
+      "Effect": "Allow",
+      "Action": [
+        "iam:PassRole"
+      ],
+      "Resource": "${sagemaker_role_arn}",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "sagemaker.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "AllowVSCodeConnectivityInSageMaker",
+      "Effect": "Allow",
+      "Action": [
+        "sagemaker:StartSession"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowMLFlowInSageMaker",
+      "Effect": "Allow",
+      "Action": [
+        "sagemaker:CallMLflowAPI",
+        "sagemaker:ListExperiments",
+        "sagemaker:CreateTrackingServer",
+        "sagemaker:UpdateTrackingServer",
+        "sagemaker:DeleteTrackingServer",
+        "sagemaker:ManageTrackingServer",
+        "sagemaker:ListRuns",
+        "sagemaker:CreateExperiment",
+        "sagemaker:ListModelPackages",
+        "sagemaker:CreateModelPackage",
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Deny",
+      "Action": [
+        "sagemaker:CreateModel",
+        "sagemaker:CreateEndpointConfig",
+        "sagemaker:CreateEndpoint",
+        "sagemaker:UpdateEndpoint",
+        "sagemaker:DeleteModel",
+        "sagemaker:DeleteEndpointConfig",
+        "sagemaker:DeleteEndpoint"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+</content>
+
+<content full_path="base/inputs/sandbox/982534393096_46de60f5-2b31-4fb7-9cbf-b728d5b104e3.tfvars">
+aws_region     = "us-east-1"
+aws_account_id = "982534393096"
+project_id     = "46de60f5-2b31-4fb7-9cbf-b728d5b104e3"
+
+
+vpc = {
+  cidr_block             = "10.93.128.0/22"
+  number_azs             = 2
+  sagemaker_subnet_cidrs = ["10.93.128.0/25", "10.93.128.128/25"]
+  endpoint_subnet_cidrs  = ["10.93.129.0/25", "10.93.129.128/25"]
+}
+
+tags = {
+  "project_id"   = "46de60f5-2b31-4fb7-9cbf-b728d5b104e3",
+  "aide-id"      = "AIDE_0074310"
+  "hcp_rg"       = "migration-aide-0074310-4416a57",
+  "environment"  = "dev",
+  "service-tier" = "p2"
+}
+
+endpoint_names = ["ecr.api", "ecr.dkr", "logs", "ssm", "ssmmessages", "ec2messages", "sagemaker.api", "secretsmanager", "sagemaker.runtime",
+  "sagemaker.featurestore-runtime", "servicecatalog", "forecast", "forecastquery", "rekognition", "textract", "comprehend", "sts", "redshift-data",
+"athena", "glue", "codewhisperer"]
+
+</content>
+
+<content full_path="base/s3_bucket/data.tf">
+data "aws_caller_identity" "current" {}
+
+data "aws_region" "current" {}
+</content>
+
+<content full_path="base/s3_bucket/outputs.tf">
+output "workspace_bucket_id" {
+  value = aws_s3_bucket.workspace_bucket.id
+}
+
+output "workspace_bucket_arn" {
+  value = aws_s3_bucket.workspace_bucket.arn
+}
+
+output "byod_bucket_id" {
+  value = aws_s3_bucket.byod_bucket.id
+}
+
+output "byod_bucket_arn" {
+  value = aws_s3_bucket.byod_bucket.arn
+}
+
+output "service_bucket_id" {
+  value = aws_s3_bucket.service_bucket.id
+}
+
+output "service_bucket_arn" {
+  value = aws_s3_bucket.service_bucket.arn
+}
+</content>
+
+<content full_path="base/s3_bucket/byod_bucket.tf">
+resource "aws_s3_bucket" "byod_bucket" {
+  bucket = "${var.bucket_prefix}-byod-bucket"
+  tags   = var.tags
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "byod_bucket" {
+  bucket = aws_s3_bucket.byod_bucket.bucket
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = var.kms_arn
+      sse_algorithm     = "aws:kms"
+    }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "byod_bucket_life_cycle_config" {
+  bucket = aws_s3_bucket.byod_bucket.id
+
+  rule {
+    id = "life-cycle-configuration-rule"
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+    status = "Enabled"
+    filter {}  # Applies to all objects in the bucket
+  }
+}
+
+resource "aws_s3_bucket_logging" "byod_bucket_access_log" {
+  bucket = aws_s3_bucket.byod_bucket.id
+
+  target_bucket = aws_s3_bucket.byod_bucket.id
+  target_prefix = "log/"
+}
+
+resource "aws_s3_bucket_versioning" "byod_bucket_versioning" {
+  bucket = aws_s3_bucket.byod_bucket.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_policy" "byod_bucket_policy" {
+  bucket = aws_s3_bucket.byod_bucket.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Principal = {
+          AWS = [
+            var.sagemaker_role_arn
+          ]
+        },
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket",
+          "s3:GetBucketAcl"
+        ],
+        Resource = [
+          aws_s3_bucket.byod_bucket.arn,
+          "${aws_s3_bucket.byod_bucket.arn}/*"
+        ]
+      },
+      {
+        Effect = "Deny",
+        Principal = "*",
+        Action = [
+          "s3:PutObject",
+          "s3:PutObjectAcl"
+        ],
+        Resource = [
+          aws_s3_bucket.byod_bucket.arn,
+          "${aws_s3_bucket.byod_bucket.arn}/*"
+        ],
+        Condition = {
+          NotIpAddress = {
+            "aws:SourceIp" = var.tower_ips
+          }
+        }
+      }
+    ]
+  })
+}
+
+</content>
+
+<content full_path="base/s3_bucket/service_bucket.tf">
+resource "aws_s3_bucket" "service_bucket" {
+  bucket = "${var.bucket_prefix}-service-bucket"
+  tags   = var.tags
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "service_bucket" {
+  bucket = aws_s3_bucket.service_bucket.bucket
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = var.kms_arn
+      sse_algorithm     = "aws:kms"
+    }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "service_bucket_life_cycle_config" {
+  bucket = aws_s3_bucket.service_bucket.id
+
+  rule {
+    id = "life-cycle-configuration-rule"
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+    status = "Enabled"
+    filter {}  # Applies to all objects in the bucket
+  }
+}
+
+resource "aws_s3_bucket_logging" "service_bucket_access_log" {
+  bucket = aws_s3_bucket.service_bucket.id
+
+  target_bucket = aws_s3_bucket.service_bucket.id
+  target_prefix = "log/"
+}
+
+resource "aws_s3_bucket_versioning" "service_bucket_versioning" {
+  bucket = aws_s3_bucket.service_bucket.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+</content>
+
+<content full_path="base/s3_bucket/variables.tf">
+variable "tower_ips" {
+    description = "Optum Tower IPs"
+    type        = list(string)
+}
+
+variable "bucket_prefix" {
+  description = "Name of Project"
+  type        = string
+}
+
+variable "tags" {
+  type        = map(string)
+  description = "Tags to apply to resources."
+}
+
+variable "kms_arn" {
+  description = "kms key to encrypt EFS"
+  type        = string
+}
+
+variable "sagemaker_role_arn" {
+  description = "arn of sagemaker domain"
+  type        = string
+}
+</content>
+
+<content full_path="base/s3_bucket/workspace_bucket.tf">
+resource "aws_s3_bucket" "workspace_bucket" {
+  bucket = "${var.bucket_prefix}-workspace-bucket"
+  tags   = var.tags
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "workspace_bucket" {
+  bucket = aws_s3_bucket.workspace_bucket.bucket
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = var.kms_arn
+      sse_algorithm     = "aws:kms"
+    }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "workspace_bucket_life_cycle_config" {
+  bucket = aws_s3_bucket.workspace_bucket.id
+
+  rule {
+    id = "life-cycle-configuration-rule"
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+    status = "Enabled"
+    filter {}  # Applies to all objects in the bucket
+  }
+}
+
+resource "aws_s3_bucket_logging" "workspace_bucket_access_log" {
+  bucket = aws_s3_bucket.workspace_bucket.id
+
+  target_bucket = aws_s3_bucket.workspace_bucket.id
+  target_prefix = "log/"
+}
+
+resource "aws_s3_bucket_versioning" "workspace_bucket_versioning" {
+  bucket = aws_s3_bucket.workspace_bucket.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_policy" "workspace_bucket_policy" {
+  bucket = aws_s3_bucket.workspace_bucket.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          AWS = [
+            var.sagemaker_role_arn
+          ]
+        }
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:ListBucket",
+          "s3:GetBucketAcl",
+          "s3:PutObjectAcl"
+        ]
+        Resource = [
+          aws_s3_bucket.workspace_bucket.arn,
+          "${aws_s3_bucket.workspace_bucket.arn}/*"
+        ]
+      }
+    ]
+  })
+}
+</content>
+
+</repo-to-text>

@@ -53,3 +53,19 @@
   ]
 }
 ```
+----
+```
+
+resource "aws_cloudwatch_log_group" "lex_conversation_logs" {
+  name              = "/aws/lex/bots/${local.base_prefix}-lex"
+  retention_in_days = 30
+  kms_key_id        = aws_kms_key.base_kms_key.arn
+  
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+```

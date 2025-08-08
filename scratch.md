@@ -1,24 +1,55 @@
 ```
-resource "aws_cloudwatch_log_resource_policy" "opensearch_logs_policy" {
-  policy_name     = "${local.base_prefix}-opensearch-logs-policy"
-  policy_document = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          Service = "es.amazonaws.com"
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "LexProjectAccess",
+      "Effect": "Allow",
+      "Action": "lex:*",
+      "Resource": "*",
+      "Condition": {
+        "StringLike": {
+          "lex:bot-name": "project-${uuid}-*"
         }
-        Action = [
-          "logs:PutLogEvents",
-          "logs:CreateLogStream"
-        ]
-        Resource = [
-          "${aws_cloudwatch_log_group.opensearch_slow_logs.arn}:*",
-          "${aws_cloudwatch_log_group.opensearch_app_logs.arn}:*", 
-          "${aws_cloudwatch_log_group.opensearch_audit_logs.arn}:*"
-        ]
       }
-    ]
-  })
-}```
+    },
+    {
+      "Sid": "SupportingServices",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:GetFunction",
+        "lambda:ListFunctions",
+        "logs:*LogGroup*",
+        "logs:GetLogEvents",
+        "s3:GetObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:lambda:*:*:function:project-${uuid}-*",
+        "arn:aws:logs:*:*:log-group:/aws/lex/project-${uuid}-*",
+        "arn:aws:s3:::project-${uuid}-conversation-logs*"
+      ]
+    },
+    {
+      "Sid": "SecurityBoundaries",
+      "Effect": "Deny",
+      "Action": [
+        "iam:*",
+        "sts:AssumeRole"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "EnforceServiceRole",
+      "Effect": "Deny",
+      "Action": "lex:UpdateBot",
+      "Resource": "*",
+      "Condition": {
+        "StringNotEquals": {
+          "lex:service-role": "arn:aws:iam::${aws:accountId}:role/project-${uuid}-lex-service-role"
+        }
+      }
+    }
+  ]
+}
+```

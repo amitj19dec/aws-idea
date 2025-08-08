@@ -16,18 +16,32 @@ Directory Structure:
 │   │       └── ./base/inputs/sandbox/982534393096_46de60f5-2b31-4fb7-9cbf-b728d5b104e3.tfvars
 │   ├── ./base/locals.tf
 │   ├── ./base/main.tf
+│   ├── ./base/outputs.tf
+│   ├── ./base/param_store_values.tf
 │   ├── ./base/policies
+│   │   ├── ./base/policies/bedrock_kb
+│   │   │   └── ./base/policies/bedrock_kb/bedrock_kb_custom.tpl
+│   │   ├── ./base/policies/glue
+│   │   │   └── ./base/policies/glue/glue.tpl
 │   │   ├── ./base/policies/lambda
 │   │   │   ├── ./base/policies/lambda/ai.json.tpl
 │   │   │   ├── ./base/policies/lambda/base.json.tpl
 │   │   │   ├── ./base/policies/lambda/data.json.tpl
 │   │   │   ├── ./base/policies/lambda/monitoring.json.tpl
 │   │   │   └── ./base/policies/lambda/secret.json.tpl
+│   │   ├── ./base/policies/lex
+│   │   │   └── ./base/policies/lex/lex.tpl
+│   │   ├── ./base/policies/opensearch
+│   │   │   └── ./base/policies/opensearch/opensearch_master.tpl
 │   │   └── ./base/policies/sagemaker
 │   │       └── ./base/policies/sagemaker/sagemaker_custom.tpl
 │   ├── ./base/provider.tf
+│   ├── ./base/role_bedrock_kb.tf
+│   ├── ./base/role_opensearch.tf
 │   ├── ./base/role_sagemaker.tf
+│   ├── ./base/roles_glue.tf
 │   ├── ./base/roles_lambda.tf
+│   ├── ./base/roles_lex.tf
 │   ├── ./base/s3_bucket
 │   │   ├── ./base/s3_bucket/byod_bucket.tf
 │   │   ├── ./base/s3_bucket/data.tf
@@ -36,6 +50,31 @@ Directory Structure:
 │   │   ├── ./base/s3_bucket/variables.tf
 │   │   └── ./base/s3_bucket/workspace_bucket.tf
 │   └── ./base/variables.tf
+├── ./bedrock-kb
+│   ├── ./bedrock-kb/data.tf
+│   ├── ./bedrock-kb/inputs
+│   │   └── ./bedrock-kb/inputs/sandbox
+│   │       └── ./bedrock-kb/inputs/sandbox/982534393096_46de60f5-2b31-4fb7-9cbf-b728d5b104e3.tfvars
+│   ├── ./bedrock-kb/locals.tf
+│   ├── ./bedrock-kb/main.tf
+│   ├── ./bedrock-kb/outputs.tf
+│   ├── ./bedrock-kb/param_store_values.tf
+│   ├── ./bedrock-kb/provider.tf
+│   └── ./bedrock-kb/variables.tf
+├── ./glue
+│   ├── ./glue/locals.tf
+│   ├── ./glue/main.tf
+│   ├── ./glue/provider.tf
+│   └── ./glue/variables.tf
+├── ./managed-opensearch
+│   ├── ./managed-opensearch/data.tf
+│   ├── ./managed-opensearch/inputs
+│   │   └── ./managed-opensearch/inputs/982534393096_46de60f5-2b31-4fb7-9cbf-b728d5b104e3.tfvars
+│   ├── ./managed-opensearch/locals.tf
+│   ├── ./managed-opensearch/main.tf
+│   ├── ./managed-opensearch/outputs.tf
+│   └── ./managed-opensearch/variables.tf
+├── ./repo-to-text_2025-08-08-09-37-39-UTC.txt
 └── ./sagemaker-infra
     ├── ./sagemaker-infra/data.tf
     ├── ./sagemaker-infra/inputs
@@ -44,10 +83,74 @@ Directory Structure:
     ├── ./sagemaker-infra/locals.tf
     ├── ./sagemaker-infra/main.tf
     ├── ./sagemaker-infra/outputs.tf
+    ├── ./sagemaker-infra/param_store_values.tf
     ├── ./sagemaker-infra/provider.tf
     └── ./sagemaker-infra/variables.tf
 
 </directory_structure>
+
+<content full_path="glue/locals.tf">
+locals {
+  base_prefix   = "uais-${split("-", var.project_id)[0]}"
+  glue_catalog  = format("${local.base_prefix}-glue-catalog")
+}
+
+</content>
+
+<content full_path="glue/main.tf">
+resource "aws_glue_catalog_database" "aws" {
+  name = local.glue_catalog
+  description = "The Glue Catalog database"
+}
+</content>
+
+<content full_path="glue/variables.tf">
+variable "aws_region" {
+  description = "AWS Region."
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "project_id" {
+  description = "UAIS Project ID tied to the workspace"
+  type        = string
+}
+
+# variable "glue_catalog_name" {
+#   description = "The name of the Glue Catalog database"
+#   type        = string
+# }
+</content>
+
+<content full_path="glue/provider.tf">
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+  #   backend "s3" {
+  #     access_key = ""
+  #     secret_key = ""
+  #     token      = ""
+  #     bucket     = ""
+  #     key        = ""
+  #     region     = ""
+  #   }
+}
+
+provider "aws" {
+
+  #   access_key = var.aws_access_key
+  #   secret_key = var.aws_secret_key
+  region = var.aws_region
+  #
+  #   assume_role {
+  #     role_arn = "arn:aws:iam::${var.aws_account_id}:role/uais_admin_access_role"
+  #   }
+}
+</content>
 
 <content full_path="sagemaker-infra/data.tf">
 data "aws_caller_identity" "current" {}
@@ -93,6 +196,11 @@ data "aws_iam_role" "sagemaker_domain_default_execution_role" {
   name = local.sagemaker_role_name
 }
 
+data "aws_security_group" "sagemaker_sg" {
+  name   = "${local.base_prefix}-sagemaker-sg"
+  vpc_id = data.aws_vpc.spoke_vpc.id
+}
+
 </content>
 
 <content full_path="sagemaker-infra/outputs.tf">
@@ -114,57 +222,6 @@ locals {
 </content>
 
 <content full_path="sagemaker-infra/main.tf">
-resource "aws_security_group" "sagemaker_sg" {
-  name        = "${local.base_prefix}-sagemaker-sg"
-  description = "Allow certain NFS and TCP inbound traffic"
-  vpc_id      = data.aws_vpc.spoke_vpc.id
-
-  # restricting access from optum tower ips
-  ingress {
-    description = "Ingress access only with in optum tower ips"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = local.optum_ip_whitelist
-  }
-
-  ingress {
-    description = "NFS traffic over TCP on port 2049 between the domain and EFS volume"
-    from_port   = 2049
-    to_port     = 2049
-    protocol    = "tcp"
-    self        = true
-  }
-
-  ingress {
-    description = "TCP traffic between JupyterServer app and the KernelGateway apps"
-    from_port   = 8192
-    to_port     = 65535
-    protocol    = "tcp"
-    self        = true
-  }
-
-  # By default, AWS creates an ALLOW ALL egress rule when creating a new Security Group inside of a VPC.
-  # When creating a new Security Group inside a VPC, Terraform will remove this default rule,
-  # and require you specifically re-create it if you desire that rule.
-  egress {
-    description      = "Allow outbound traffic"
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1" # semantically equivalent to all ports
-    cidr_blocks      = ["0.0.0.0/0"]
-    ipv6_cidr_blocks = ["::/0"]
-  }
-
-  tags = merge(
-    var.tags,
-    {
-      provisoner = local.resource_provisioner
-      name       = "${local.base_prefix}-sagemaker-sg"
-    }
-  )
-}
-
 resource "aws_sagemaker_domain" "sagemaker_domain" {
   domain_name             = "${local.base_prefix}-sagemaker-domain"
   app_network_access_type = var.app_network_access_type
@@ -188,7 +245,7 @@ resource "aws_sagemaker_domain" "sagemaker_domain" {
   }
 
   domain_settings {
-    security_group_ids = [aws_security_group.sagemaker_sg.id]
+    security_group_ids = [data.aws_security_group.sagemaker_sg.id]
   }
 
   retention_policy {
@@ -212,7 +269,7 @@ resource "aws_sagemaker_user_profile" "default_user" {
 
   user_settings {
     execution_role  = data.aws_iam_role.sagemaker_domain_default_execution_role.arn
-    security_groups = [aws_security_group.sagemaker_sg.id]
+    security_groups = [data.aws_security_group.sagemaker_sg.id]
   }
 
   tags = merge(
@@ -220,6 +277,34 @@ resource "aws_sagemaker_user_profile" "default_user" {
     {
       provisoner = local.resource_provisioner
       username   = each.value
+    }
+  )
+}
+</content>
+
+<content full_path="sagemaker-infra/param_store_values.tf">
+resource "aws_ssm_parameter" "sagemaker_domain_id" {
+  name  = "/params/${local.base_prefix}/platform/sagemaker-domain-id"
+  type  = "String"
+  value = aws_sagemaker_domain.sagemaker_domain.id
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+resource "aws_ssm_parameter" "sagemaker_domain_arn" {
+  name  = "/params/${local.base_prefix}/platform/sagemaker-domain-arn"
+  type  = "String"
+  value = aws_sagemaker_domain.sagemaker_domain.arn
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
     }
   )
 }
@@ -317,6 +402,803 @@ tags = {
 enable_bedrock_access = true
 </content>
 
+<content full_path="managed-opensearch/data.tf">
+data "aws_caller_identity" "current" {}
+
+data "aws_region" "current" {}
+
+data "aws_vpc" "spoke_vpc" {
+  filter {
+    name   = "tag:Name"
+    values = ["${local.base_prefix}-vpc"]
+  }
+}
+
+data "aws_kms_key" "base_kms_key" {
+  key_id = local.kms_key_alias
+}
+
+data "aws_subnets" "opensearch_subnets" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.spoke_vpc.id]
+  }
+
+  filter {
+    name   = "tag:Name"
+    values = ["${local.base_prefix}-endpoints*"]
+  }
+}
+
+data "aws_iam_role" "opensearch_master_role" {
+  name = "${local.base_prefix}-opensearch-master-role"
+}
+
+#data "aws_iam_role" "lambda_exec_role" {
+#  name = "${local.base_prefix}-lambda-exec-role"
+#}
+
+data "aws_iam_role" "sagemaker_domain_exec_role" {
+  name = "${local.base_prefix}-sagemaker-domain-exec-role"
+}
+
+# Fetch the OpenSearch security group created in the base module
+data "aws_security_group" "opensearch_sg" {
+  filter {
+    name   = "tag:name"
+    values = ["${local.base_prefix}-opensearch-sg"]
+  }
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.spoke_vpc.id]
+  }
+}
+
+</content>
+
+<content full_path="managed-opensearch/outputs.tf">
+output "opensearch_domain_id" {
+  value       = aws_opensearch_domain.opensearch.id
+  description = "The ID of the OpenSearch domain"
+}
+
+output "opensearch_domain_arn" {
+  value       = aws_opensearch_domain.opensearch.arn
+  description = "The ARN of the OpenSearch domain"
+}
+
+output "opensearch_endpoint" {
+  value       = aws_opensearch_domain.opensearch.endpoint
+  description = "The OpenSearch domain endpoint"
+}
+
+output "opensearch_domain_name" {
+  value       = aws_opensearch_domain.opensearch.domain_name
+  description = "The name of the OpenSearch domain"
+}
+
+output "opensearch_security_group_id" {
+  value       = data.aws_security_group.opensearch_sg.id
+  description = "The ID of the OpenSearch security group"
+}
+
+</content>
+
+<content full_path="managed-opensearch/locals.tf">
+locals {
+  optum_ip_whitelist = ["168.183.0.0/16", "149.111.0.0/16", "128.35.0.0/16", "161.249.0.0/16", "198.203.174.0/23",
+  "198.203.176.0/22", "198.203.180.0/23"]
+  resource_provisioner = "UAIS"
+  base_prefix          = "uais-${split("-", var.project_id)[0]}"
+  kms_key_alias        = "alias/${local.base_prefix}-kms-key"
+  opensearch_master_role_name = "${local.base_prefix}-opensearch-master-role"
+}
+</content>
+
+<content full_path="managed-opensearch/main.tf">
+resource "aws_opensearch_domain" "opensearch" {
+  domain_name    = "${local.base_prefix}-opensearch"
+  engine_version = var.engine_version
+
+  cluster_config {
+    instance_type            = var.instance_type
+    instance_count           = var.instance_count
+    dedicated_master_enabled = var.dedicated_master_enabled
+    dedicated_master_type     = var.dedicated_master_type
+    dedicated_master_count    = var.dedicated_master_count
+    zone_awareness_enabled   = var.zone_awareness_enabled
+
+    dynamic "zone_awareness_config" {
+      for_each = var.zone_awareness_enabled ? [1] : []
+      content {
+        availability_zone_count = length(data.aws_subnets.opensearch_subnets.ids)
+      }
+    }
+  }
+
+  # VPC configuration for private deployment
+  vpc_options {
+    subnet_ids         = data.aws_subnets.opensearch_subnets.ids
+    security_group_ids = [data.aws_security_group.opensearch_sg.id]
+  }
+
+  # EBS storage configuration
+  ebs_options {
+    ebs_enabled = true
+    volume_type = var.ebs_volume_type
+    volume_size = var.ebs_volume_size
+  }
+
+  # Fine-grained access control with IAM master user
+  advanced_security_options {
+    enabled                        = true
+    anonymous_auth_enabled         = false
+    internal_user_database_enabled = false
+    master_user_options {
+      master_user_arn = data.aws_iam_role.opensearch_master_role.arn
+    }
+  }
+
+  # Encryption at rest using project-scoped KMS key
+  encrypt_at_rest {
+    enabled    = true
+    kms_key_id = data.aws_kms_key.base_kms_key.arn
+  }
+
+  # Node-to-node encryption
+  node_to_node_encryption {
+    enabled = true
+  }
+
+  # Domain endpoint options
+  domain_endpoint_options {
+    enforce_https       = true
+    tls_security_policy = "Policy-Min-TLS-1-2-2019-07"
+  }
+
+  # Log publishing configuration
+  log_publishing_options {
+    enabled                  = true
+    log_type                 = "SEARCH_SLOW_LOGS"
+    cloudwatch_log_group_arn = aws_cloudwatch_log_group.opensearch_slow_logs.arn
+  }
+
+  log_publishing_options {
+    enabled                  = true
+    log_type                 = "ES_APPLICATION_LOGS"
+    cloudwatch_log_group_arn = aws_cloudwatch_log_group.opensearch_app_logs.arn
+  }
+
+  log_publishing_options {
+    enabled                  = true
+    log_type                 = "AUDIT_LOGS"
+    cloudwatch_log_group_arn = aws_cloudwatch_log_group.opensearch_audit_logs.arn
+  }
+
+  # Access policy restricting to project VPC
+  access_policies = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          AWS = [
+            data.aws_iam_role.opensearch_master_role.arn,
+            #data.aws_iam_role.lambda_exec_role.arn,
+            data.aws_iam_role.sagemaker_domain_exec_role.arn
+          ]
+        }
+        Action   = "es:*"
+        Resource = "arn:aws:es:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:domain/${local.base_prefix}-opensearch/*"
+      }
+    ]
+  })
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+      name       = "${local.base_prefix}-opensearch"
+    }
+  )
+
+  depends_on = [
+    aws_cloudwatch_log_group.opensearch_slow_logs,
+    aws_cloudwatch_log_group.opensearch_app_logs,
+    aws_cloudwatch_log_group.opensearch_audit_logs,
+    aws_cloudwatch_log_resource_policy.opensearch_logs_policy
+  ]
+}
+
+# CloudWatch log groups for OpenSearch logs
+resource "aws_cloudwatch_log_group" "opensearch_slow_logs" {
+  name              = "/aws/opensearch/domains/${local.base_prefix}-opensearch/search-slow-logs"
+  retention_in_days = 30
+  # kms_key_id        = data.aws_kms_key.base_kms_key.arn
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+resource "aws_cloudwatch_log_group" "opensearch_app_logs" {
+  name              = "/aws/opensearch/domains/${local.base_prefix}-opensearch/application-logs"
+  retention_in_days = 30
+  # kms_key_id        = data.aws_kms_key.base_kms_key.arn
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+resource "aws_cloudwatch_log_group" "opensearch_audit_logs" {
+  name              = "/aws/opensearch/domains/${local.base_prefix}-opensearch/audit-logs"
+  retention_in_days = 90
+  # kms_key_id        = data.aws_kms_key.base_kms_key.arn
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+# CloudWatch log resource policy to allow OpenSearch to write logs
+resource "aws_cloudwatch_log_resource_policy" "opensearch_logs_policy" {
+  policy_name = "${local.base_prefix}-opensearch-logs-policy"
+  policy_document = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "es.amazonaws.com"
+        }
+        Action = [
+          "logs:PutLogEvents",
+          "logs:CreateLogStream"
+        ]
+        Resource = [
+          "${aws_cloudwatch_log_group.opensearch_slow_logs.arn}:*",
+          "${aws_cloudwatch_log_group.opensearch_app_logs.arn}:*",
+          "${aws_cloudwatch_log_group.opensearch_audit_logs.arn}:*"
+        ]
+      }
+    ]
+  })
+}
+
+# Parameter Store for service discovery
+resource "aws_ssm_parameter" "opensearch_endpoint" {
+  name  = "/params/${local.base_prefix}/platform/opensearch-endpoint"
+  type  = "String"
+  value = aws_opensearch_domain.opensearch.endpoint
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+resource "aws_ssm_parameter" "opensearch_domain_arn" {
+  name  = "/params/${local.base_prefix}/platform/opensearch-domain-arn"
+  type  = "String"
+  value = aws_opensearch_domain.opensearch.arn
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+</content>
+
+<content full_path="managed-opensearch/variables.tf">
+variable "aws_region" {
+  description = "AWS Region."
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "project_id" {
+  description = "UAIS Project ID tied to the workspace"
+  type        = string
+}
+
+variable "tags" {
+  type        = map(string)
+  description = "Tags to apply to resources."
+}
+
+variable "aws_account_id" {
+  description = "AWS Account ID"
+  type        = string
+}
+
+variable "instance_type" {
+  description = "Instance type for OpenSearch data nodes"
+  type        = string
+  default     = "m6g.large.search"
+}
+
+variable "instance_count" {
+  description = "Number of data nodes in the OpenSearch domain"
+  type        = number
+  default     = 2
+}
+
+variable "dedicated_master_enabled" {
+  description = "Enable dedicated master nodes"
+  type        = bool
+  default     = true
+}
+
+variable "dedicated_master_type" {
+  description = "Instance type for OpenSearch master nodes"
+  type        = string
+  default     = "m6g.large.search"
+}
+
+variable "dedicated_master_count" {
+  description = "Number of dedicated master nodes"
+  type        = number
+  default     = 3
+}
+
+variable "ebs_volume_size" {
+  description = "EBS volume size for OpenSearch nodes (GB)"
+  type        = number
+  default     = 100
+}
+
+variable "ebs_volume_type" {
+  description = "EBS volume type for OpenSearch nodes"
+  type        = string
+  default     = "gp3"
+}
+
+variable "engine_version" {
+  description = "OpenSearch engine version"
+  type        = string
+  default     = "OpenSearch_2.13"
+}
+
+variable "zone_awareness_enabled" {
+  description = "Enable zone awareness for multi-AZ deployment"
+  type        = bool
+  default     = true
+}
+</content>
+
+<content full_path="managed-opensearch/inputs/982534393096_46de60f5-2b31-4fb7-9cbf-b728d5b104e3.tfvars">
+aws_region     = "us-east-1"
+aws_account_id = "982534393096"
+project_id     = "46de60f5-2b31-4fb7-9cbf-b728d5b104e3"
+
+
+vpc = {
+  cidr_block             = "10.93.128.0/22"
+  number_azs             = 2
+  sagemaker_subnet_cidrs = ["10.93.128.0/25", "10.93.128.128/25"]
+  endpoint_subnet_cidrs  = ["10.93.129.0/25", "10.93.129.128/25"]
+}
+
+tags = {
+  "project_id"   = "46de60f5-2b31-4fb7-9cbf-b728d5b104e3",
+  "aide-id"      = "AIDE_0074310"
+  "hcp_rg"       = "migration-aide-0074310-4416a57",
+  "environment"  = "dev",
+  "service-tier" = "p2"
+}
+
+endpoint_names = ["ecr.api", "ecr.dkr", "logs", "ssm", "ssmmessages", "ec2messages", "sagemaker.api", "secretsmanager", "sagemaker.runtime",
+  "sagemaker.featurestore-runtime", "servicecatalog", "forecast", "forecastquery", "rekognition", "textract", "comprehend", "sts", "redshift-data",
+"athena", "glue", "codewhisperer"]
+
+</content>
+
+<content full_path="bedrock-kb/data.tf">
+data "aws_caller_identity" "current" {}
+
+data "aws_region" "current" {}
+
+# the workspace bucket is used to store the raw data files
+# customer can bring data in byod bucket and apply transformations and then move transformed dat to workspace bucket
+data "aws_s3_bucket" "raw_data_bucket" {
+  bucket = local.raw_data_bucket_name
+}
+
+data "aws_iam_role" "bedrock_kb_role" {
+  name = local.bedrock_kb_role_name
+}
+
+data "aws_kms_key" "base_kms_key" {
+  key_id = local.kms_key_alias
+}
+
+data "aws_vpc" "spoke_vpc" {
+  filter {
+    name   = "tag:Name"
+    values = ["${local.base_prefix}-vpc"]
+  }
+}
+
+data "aws_subnets" "endpoints_subnets" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.spoke_vpc.id]
+  }
+
+  filter {
+    name   = "tag:Name"
+    values = ["${local.base_prefix}-endpoints*"]
+  }
+}
+
+data "aws_security_group" "endpoints_security_group" {
+  name   = "${local.base_prefix}-vpc-endpoints-security-group"
+  vpc_id = data.aws_vpc.spoke_vpc.id
+}
+
+data "aws_iam_role" "sagemaker_role" {
+  name = local.sagemaker_role_name
+}
+
+
+</content>
+
+<content full_path="bedrock-kb/outputs.tf">
+output "knowledge_base_id" {
+  value = aws_bedrockagent_knowledge_base.kb.id
+}
+</content>
+
+<content full_path="bedrock-kb/locals.tf">
+locals {
+  resource_provisioner               = "UAIS"
+  base_prefix                        = "uais-${split("-", var.project_id)[0]}"
+  bedrock_kb_role_name               = "${local.base_prefix}-bedrock-kb-role"
+  kb_name                            = "${local.base_prefix}-kb"
+  data_source_name                   = "${local.base_prefix}-kb-data-source"
+  opensearch_collection_name         = "${local.base_prefix}-kb-os-collection"
+  opensearch_kb_index_name           = "${local.base_prefix}-kb-os-index"
+  opensearch_encryption_policy_name  = "${local.base_prefix}-kb-os-security"
+  opensearch_network_policy_name     = "${local.base_prefix}-kb-os-network"
+  opensearch_data_access_policy_name = "${local.base_prefix}-kb-os-data-access"
+  opensearch_vpc_endpoint_name       = "${local.base_prefix}-kb-os-vpc-endpoint"
+  raw_data_bucket_name               = "${local.base_prefix}-workspace-bucket"
+  kms_key_alias                      = "alias/${local.base_prefix}-kms-key"
+  sagemaker_role_name                = "${local.base_prefix}-sagemaker-domain-exec-role"
+}
+</content>
+
+<content full_path="bedrock-kb/main.tf">
+# OpenSearch Serverless collection
+resource "aws_opensearchserverless_collection" "kb_vector_store" {
+  name = local.opensearch_collection_name
+  type = "VECTORSEARCH"
+
+  depends_on = [aws_opensearchserverless_security_policy.aoss_encryption_policy]
+}
+
+# OpenSearch Serverless encryption policy
+resource "aws_opensearchserverless_security_policy" "aoss_encryption_policy" {
+  name        = local.opensearch_encryption_policy_name
+  type        = "encryption"
+  description = "encryption security policy using customer KMS key"
+  policy = jsonencode({
+    Rules = [
+      {
+        Resource = [
+          "collection/${local.opensearch_collection_name}"
+        ],
+        ResourceType = "collection"
+      }
+    ],
+    AWSOwnedKey = false
+    KmsARN      = data.aws_kms_key.base_kms_key.arn
+  })
+}
+
+# OpenSearch Serverless network policy
+resource "aws_opensearchserverless_security_policy" "aoss_network_policy" {
+  name        = local.opensearch_network_policy_name
+  type        = "network"
+  description = "Allow Bedrock and VPC access to collection"
+  policy = jsonencode([
+    {
+      Description = "Allow Bedrock and VPC access",
+      Rules = [
+        {
+          ResourceType = "collection",
+          Resource = [
+            "collection/${local.opensearch_collection_name}"
+          ]
+        }
+      ],
+#       SourceServices = [
+#         "bedrock.amazonaws.com"
+#       ],
+#       SourceVPCEs = [
+#         aws_opensearchserverless_vpc_endpoint.aoss_vpc_endpoint.id
+#       ],
+      AllowFromPublic = true
+    }
+  ])
+}
+
+# OpenSearch Serverless data access policy
+resource "aws_opensearchserverless_access_policy" "aoss_data_access_policy" {
+  name        = local.opensearch_data_access_policy_name
+  type        = "data"
+  description = "allow index and collection access"
+  policy = jsonencode([
+    {
+      Rules = [
+        {
+          ResourceType = "index",
+          Resource = [
+            "index/${local.opensearch_collection_name}/*"
+          ],
+          Permission = [
+            "aoss:*"
+          ]
+        },
+        {
+          ResourceType = "collection",
+          Resource = [
+            "collection/${local.opensearch_collection_name}"
+          ],
+          Permission = [
+            "aoss:*"
+          ]
+        }
+      ],
+      Principal = [
+        data.aws_iam_role.sagemaker_role.arn,
+        data.aws_iam_role.bedrock_kb_role.arn,
+        data.aws_caller_identity.current.arn
+      ]
+    }
+  ])
+}
+
+# Creates a aoss VPC endpoint
+resource "aws_opensearchserverless_vpc_endpoint" "aoss_vpc_endpoint" {
+  name               = local.opensearch_vpc_endpoint_name
+  vpc_id             = data.aws_vpc.spoke_vpc.id
+  subnet_ids         = data.aws_subnets.endpoints_subnets.ids
+  security_group_ids = [data.aws_security_group.endpoints_security_group.id]
+}
+
+# Bedrock Knowledge Base
+resource "aws_bedrockagent_knowledge_base" "kb" {
+  name     = local.kb_name
+  role_arn = data.aws_iam_role.bedrock_kb_role.arn
+
+  knowledge_base_configuration {
+    vector_knowledge_base_configuration {
+      embedding_model_arn = var.embedding_model_arn
+    }
+    type = "VECTOR"
+  }
+
+  storage_configuration {
+    type = "OPENSEARCH_SERVERLESS"
+    opensearch_serverless_configuration {
+      collection_arn    = aws_opensearchserverless_collection.kb_vector_store.arn
+      vector_index_name = local.opensearch_kb_index_name
+      field_mapping {
+        vector_field   = "bedrock-knowledge-base-default-vector"
+        text_field     = "AMAZON_BEDROCK_TEXT_CHUNK"
+        metadata_field = "AMAZON_BEDROCK_METADATA"
+      }
+    }
+  }
+  depends_on = [opensearch_index.sample_kb_index]
+}
+
+provider "opensearch" {
+  url         = aws_opensearchserverless_collection.kb_vector_store.collection_endpoint
+  healthcheck = false
+}
+
+resource "opensearch_index" "sample_kb_index" {
+  name                           = local.opensearch_kb_index_name
+  number_of_shards               = "2"
+  number_of_replicas             = "0"
+  index_knn                      = true
+  index_knn_algo_param_ef_search = "512"
+  mappings                       = <<-EOF
+    {
+      "properties": {
+        "bedrock-knowledge-base-default-vector": {
+          "type": "knn_vector",
+          "dimension": 1024,
+          "method": {
+            "name": "hnsw",
+            "engine": "faiss",
+            "parameters": {
+              "m": 16,
+              "ef_construction": 512
+            },
+            "space_type": "l2"
+          }
+        },
+        "AMAZON_BEDROCK_METADATA": {
+          "type": "text",
+          "index": "false"
+        },
+        "AMAZON_BEDROCK_TEXT_CHUNK": {
+          "type": "text",
+          "index": "true"
+        }
+      }
+    }
+  EOF
+  force_destroy                  = true
+}
+
+resource "aws_bedrockagent_data_source" "kb_data_source" {
+  knowledge_base_id = aws_bedrockagent_knowledge_base.kb.id
+  name              = local.data_source_name
+
+  data_source_configuration {
+    type = "S3"
+    s3_configuration {
+      bucket_arn = data.aws_s3_bucket.raw_data_bucket.arn
+      inclusion_prefixes = [
+        "default-kb-space/"
+      ]
+    }
+  }
+}
+
+
+</content>
+
+<content full_path="bedrock-kb/param_store_values.tf">
+resource "aws_ssm_parameter" "default_kb_id" {
+  name  = "/params/${local.base_prefix}/platform/default-kb-id"
+  type  = "String"
+  value = aws_bedrockagent_knowledge_base.kb.id
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+resource "aws_ssm_parameter" "default_data_source_id" {
+  name  = "/params/${local.base_prefix}/platform/default-kb-datasource-id"
+  type  = "String"
+  value = aws_bedrockagent_data_source.kb_data_source.id
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+resource "aws_ssm_parameter" "default_aoss_collection_arn" {
+  name  = "/params/${local.base_prefix}/platform/default-aoss-collection-arn"
+  type  = "String"
+  value = aws_opensearchserverless_collection.kb_vector_store.arn
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+resource "aws_ssm_parameter" "default_aoss_endpoint" {
+  name  = "/params/${local.base_prefix}/platform/default-aoss-endpoint"
+  type  = "String"
+  value = aws_opensearchserverless_collection.kb_vector_store.collection_endpoint
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+</content>
+
+<content full_path="bedrock-kb/variables.tf">
+variable "aws_region" {
+  description = "AWS Region."
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "tags" {
+  description = "Tags to apply to resources."
+  type        = map(string)
+}
+
+variable "aws_account_id" {
+  description = "AWS Account ID"
+  type        = string
+}
+
+variable "project_id" {
+  description = "UAIS Project ID tied to the workspace"
+  type        = string
+}
+
+variable "embedding_model_arn" {
+  description = "ARN of the embedding model to use for the knowledge base"
+  type        = string
+  default     = "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0"
+}
+</content>
+
+<content full_path="bedrock-kb/provider.tf">
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+    opensearch = {
+      source  = "opensearch-project/opensearch"
+      version = "= 2.3.2"
+    }
+  }
+#   backend "s3" {
+#     access_key = ""
+#     secret_key = ""
+#     token      = ""
+#     bucket     = ""
+#     key        = ""
+#     region     = ""
+#   }
+}
+
+provider "aws" {
+
+  #   access_key = var.aws_access_key
+  #   secret_key = var.aws_secret_key
+  region = var.aws_region
+  #
+  #   assume_role {
+  #     role_arn = "arn:aws:iam::${var.aws_account_id}:role/uais_admin_access_role"
+  #   }
+}
+</content>
+
+<content full_path="bedrock-kb/inputs/sandbox/982534393096_46de60f5-2b31-4fb7-9cbf-b728d5b104e3.tfvars">
+aws_region     = "us-east-1"
+aws_account_id = "982534393096"
+project_id     = "46de60f5-2b31-4fb7-9cbf-b728d5b104e3"
+
+tags = {
+  "project_id"   = "46de60f5-2b31-4fb7-9cbf-b728d5b104e3",
+  "aide-id"      = "AIDE_0074310"
+  "hcp_rg"       = "migration-aide-0074310-4416a57",
+  "environment"  = "dev",
+  "service-tier" = "p2"
+}
+</content>
+
 <content full_path="base/role_sagemaker.tf">
 resource "aws_iam_role" "sagemaker_domain_default_execution_role" {
   name               = "${local.base_prefix}-sagemaker-domain-exec-role"
@@ -394,6 +1276,98 @@ data "aws_iam_policy_document" "sagemaker_domain_assume_role_policy" {
   }
 }
 
+data "aws_iam_policy_document" "lex_assume_role_policy" {
+  statement {
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["lexv2.amazonaws.com"]
+    }
+  }
+}
+
+
+data "aws_iam_policy_document" "glue_assume_role_policy" {
+  statement {
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["glue.amazonaws.com"]
+    }
+  }
+}
+
+data "aws_iam_policy_document" "bedrock_assume_role_policy" {
+  statement {
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["bedrock.amazonaws.com"]
+    }
+  }
+}
+
+data "aws_iam_policy_document" "opensearch_master_assume_role_policy" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+    }
+  }
+}
+
+</content>
+
+<content full_path="base/outputs.tf">
+# VPC outputs
+output "vpc_id" {
+  value       = module.spoke_vpc.vpc_attributes.id
+  description = "The ID of the VPC"
+}
+
+# Security Group outputs
+output "sagemaker_sg_id" {
+  value       = aws_security_group.sagemaker_sg.id
+  description = "The ID of the SageMaker security group"
+}
+
+output "lambda_sg_id" {
+  value       = aws_security_group.lambda_sg.id
+  description = "The ID of the Lambda security group"
+}
+
+output "opensearch_sg_id" {
+  value       = aws_security_group.opensearch_sg.id
+  description = "The ID of the OpenSearch security group"
+}
+
+# KMS outputs
+output "base_kms_key_id" {
+  value       = aws_kms_key.base_kms_key.id
+  description = "The ID of the base KMS key"
+}
+
+output "base_kms_key_arn" {
+  value       = aws_kms_key.base_kms_key.arn
+  description = "The ARN of the base KMS key"
+}
+
+# ECR outputs
+output "base_ecr_repository_url" {
+  value       = aws_ecr_repository.base_ecr_repository.repository_url
+  description = "The URL of the base ECR repository"
+}
+
+output "base_ecr_repository_arn" {
+  value       = aws_ecr_repository.base_ecr_repository.arn
+  description = "The ARN of the base ECR repository"
+}
+
 </content>
 
 <content full_path="base/locals.tf">
@@ -406,19 +1380,23 @@ locals {
 
   # Generic Policy locals
   policy_template_path = "${path.module}/policies"
-  policy_arn_prefix = "arn:aws:%s:${var.aws_region}:${var.aws_account_id}"
+  policy_arn_prefix    = "arn:aws:%s:${var.aws_region}:${var.aws_account_id}"
 
   # Lambda Policy locals
-
   policy_lambda_template_path = "${local.policy_template_path}/lambda"
 
-  policy_lambda_base_name = "${local.base_prefix}-lambda-base-policy"
-  policy_lambda_data_name = "${local.base_prefix}-lambda-data-storage-policy"
-  policy_lambda_ai_name = "${local.base_prefix}-lambda-ai-services-policy"
-  policy_lambda_secret_name = "${local.base_prefix}-lambda-secret-config-policy"
+  policy_lambda_base_name       = "${local.base_prefix}-lambda-base-policy"
+  policy_lambda_data_name       = "${local.base_prefix}-lambda-data-storage-policy"
+  policy_lambda_ai_name         = "${local.base_prefix}-lambda-ai-services-policy"
+  policy_lambda_secret_name     = "${local.base_prefix}-lambda-secret-config-policy"
   policy_lambda_monitoring_name = "${local.base_prefix}-lambda-monitoring-policy"
 
-  policy_lambda_arn_ssm = format("${local.policy_arn_prefix}:parameter/params/lambda/${local.base_prefix}*", "ssm") # Eg: arn:aws:ssm:us-east-1:952189540345:parameter/params/lambda/uais-c6945420*
+
+  policy_lambda_arn_ssm_read  = format("${local.policy_arn_prefix}:parameter/params/${local.base_prefix}/platform/*", "ssm")    # Eg: arn:aws:ssm:us-east-1:952189540345:parameter/params/lambda/uais-c6945420*
+  policy_lambda_arn_ssm_write = format("${local.policy_arn_prefix}:parameter/params/${local.base_prefix}/application/*", "ssm") # Eg: arn:aws:ssm:us-east-1:952189540345:parameter/params/lambda/uais-c6945420*
+
+  policy_lambda_arn_neptune_write = format("${local.policy_arn_prefix}:cluster:${local.base_prefix}", "rds") # Eg:  arn:aws:rds:us-east-1:952189540345:cluster:uaispocws-neptune-db
+
   policy_lambda_arn_dynamodb = format("${local.policy_arn_prefix}:table/${local.base_prefix}-dynamodb*", "dynamodb") # Eg: arn:aws:dynamodb:us-east-1:952189540345:table/uais-b4854dd4-dynamodb*
 
   lambda_policy_base = templatefile("${local.policy_lambda_template_path}/base.json.tpl", {})
@@ -428,23 +1406,66 @@ locals {
   })
 
   lambda_policy_secret = templatefile("${local.policy_lambda_template_path}/secret.json.tpl", {
-    param_store_resource_arn = local.policy_lambda_arn_ssm
+    param_store_resource_arn_read  = local.policy_lambda_arn_ssm_read,
+    param_store_resource_arn_write = local.policy_lambda_arn_ssm_write
   })
 
   lambda_policy_ai = templatefile("${local.policy_lambda_template_path}/ai.json.tpl", {
-    param_store_resource_arn = local.policy_lambda_arn_ssm
+    neptune_resource_arn = local.policy_lambda_arn_neptune_write,
   })
 
-  lambda_policy_monitoring = templatefile("${local.policy_lambda_template_path}/monitoring.json.tpl", {
-    param_store_resource_arn = local.policy_lambda_arn_ssm
-  })
+  lambda_policy_monitoring = templatefile("${local.policy_lambda_template_path}/monitoring.json.tpl", {})
+
+  role_lambda_exec_role = "${local.base_prefix}-lambda-domain-exec-role"
+
+  # Lambda Resource Arn
+  lambda_resource_arn = format("${policy_arn_prefix}/:function:uais-${var.project_id}*", "lambda") # e.g. arn:aws:lambda:your-region:your-account-id:function:uais-c6945420*
 
   sagemaker_policy_name = "${local.base_prefix}-sagemaker-execution-policy"
   sagemaker_policy = templatefile("${path.module}/policies/sagemaker/sagemaker_custom.tpl", {
+    workspace_bucket_arn          = module.s3_bucket.workspace_bucket_arn
+    byod_bucket_arn               = module.s3_bucket.byod_bucket_arn
+    base_ecr_arn                  = aws_ecr_repository.base_ecr_repository.arn
+    sagemaker_role_arn            = aws_iam_role.sagemaker_domain_default_execution_role.arn
+    base_kms_arn                  = aws_kms_key.base_kms_key.arn
+    aoss_arn                      = "arn:aws:aoss:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:collection/*"
+    param_store_resource_arn_read = local.policy_lambda_arn_ssm_read
+  })
+
+  bedrock_kb_role_name   = "${local.base_prefix}-bedrock-kb-role"
+  bedrock_kb_policy_name = "${local.base_prefix}-bedrock-kb-policy"
+  bedrock_kb_policy = templatefile("${path.module}/policies/bedrock_kb/bedrock_kb_custom.tpl", {
     workspace_bucket_arn = module.s3_bucket.workspace_bucket_arn
-    byod_bucket_arn      = module.s3_bucket.byod_bucket_arn
-    base_ecr_arn         = aws_ecr_repository.base_ecr_repository.arn
-    sagemaker_role_arn   = aws_iam_role.sagemaker_domain_default_execution_role.arn
+    aoss_arn             = "arn:aws:aoss:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:collection/*"
+    embedding_model_arn  = "arn:aws:bedrock:us-east-1::foundation-model/*"
+    base_kms_arn         = aws_kms_key.base_kms_key.arn
+  })
+
+  lex_policy = templatefile("${path.module}/policies/lex/lex.tpl", {
+    param_store_allow_lambda_invocation_for_lex_resource_arn    = format("${local.policy_arn_prefix}:function:*", "lambda")
+    param_store_allow_cloudwatch_logs_for_lex_resource_arn      = format("${local.policy_arn_prefix}:log-group:/aws/lex/*", "logs")
+  })
+
+  policy_lex_base = "${local.base_prefix}-lex-base-policy"
+  role_lex        = "${local.base_prefix}-lex-exec-role"
+
+  policy_glue_base  = "${local.base_prefix}-glue-base-policy"
+  role_glue         = "${local.base_prefix}-glue-exec-role"
+  glue_catalog      = format("${local.base_prefix}-glue-catalog")
+
+  glue_policy = templatefile("${path.module}/policies/glue/glue.tpl", {
+    workspace_bucket_arn                                      = module.s3_bucket.workspace_bucket_arn
+    service_bucket_arn                                        = module.s3_bucket.service_bucket_arn
+    glue_catalog_database_arn                                 = format("${local.policy_arn_prefix}:%s/${local.glue_catalog}", "glue", "database")
+    glue_catalog_table_arn                                    = format("${local.policy_arn_prefix}:%s/${local.glue_catalog}", "glue", "table")
+    glue_log_group_arn                                        = format("${local.policy_arn_prefix}:log-group:/aws-glue/*", "logs")
+    param_store_allow_catalog_read_and_create_for_crawler_arn = format("${local.policy_arn_prefix}:catalog", "glue")
+  })
+
+  opensearch_policy_name = "${local.base_prefix}-opensearch-master-policy"
+  opensearch_domain_arn = format("${local.policy_arn_prefix}:domain/${local.base_prefix}-opensearch/*", "es")
+  opensearch_master_policy = templatefile("${path.module}/policies/opensearch/opensearch_master.tpl", {
+    opensearch_domain_arn = local.opensearch_domain_arn
     base_kms_arn         = aws_kms_key.base_kms_key.arn
   })
 }
@@ -486,6 +1507,55 @@ resource "aws_iam_policy" "lambda_exec_policy_monitoring" {
   policy      = local.lambda_policy_monitoring
 }
 
+# Creating the role
+resource "aws_iam_role" "lambda_exec_role" {
+  name = local.role_lambda_exec_role
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Action = "sts:AssumeRole",
+        Effect = "Allow",
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+
+# Attaching the base policy
+resource "aws_iam_role_policy_attachment" "base_policy_attachment" {
+  role       = aws_iam_role.lambda_exec_role.name
+  policy_arn = aws_iam_policy.lambda_exec_policy_base.arn
+}
+
+# Attaching the ai policy
+resource "aws_iam_role_policy_attachment" "ai_policy_attachment" {
+  role       = aws_iam_role.lambda_exec_role.name
+  policy_arn = aws_iam_policy.lambda_exec_policy_ai.arn
+}
+
+# Attaching the data policy
+resource "aws_iam_role_policy_attachment" "data_policy_attachment" {
+  role       = aws_iam_role.lambda_exec_role.name
+  policy_arn = aws_iam_policy.lambda_exec_policy_data.arn
+}
+
+# Attaching the monitoring policy
+resource "aws_iam_role_policy_attachment" "monitoring_policy_attachment" {
+  role       = aws_iam_role.lambda_exec_role.name
+  policy_arn = aws_iam_policy.lambda_exec_policy_monitoring.arn
+}
+
+# Attaching the secret policy
+resource "aws_iam_role_policy_attachment" "secret_policy_attachment" {
+  role       = aws_iam_role.lambda_exec_role.name
+  policy_arn = aws_iam_policy.lambda_exec_policy_secrets.arn
+}
+
 </content>
 
 <content full_path="base/main.tf">
@@ -514,6 +1584,113 @@ module "spoke_vpc" {
       provisoner          = local.resource_provisioner
       name                = "${local.base_prefix}-vpc"
       np_ready_to_reroute = "true"
+    }
+  )
+}
+
+resource "aws_security_group" "sagemaker_sg" {
+  name        = "${local.base_prefix}-sagemaker-sg"
+  description = "Allow certain NFS and TCP inbound traffic"
+  vpc_id      = module.spoke_vpc.vpc_attributes.id
+
+  # restricting access from optum tower ips
+  ingress {
+    description = "Ingress access only with in optum tower ips"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = local.optum_ip_whitelist
+  }
+
+  ingress {
+    description = "NFS traffic over TCP on port 2049 between the domain and EFS volume"
+    from_port   = 2049
+    to_port     = 2049
+    protocol    = "tcp"
+    self        = true
+  }
+
+  ingress {
+    description = "TCP traffic between JupyterServer app and the KernelGateway apps"
+    from_port   = 8192
+    to_port     = 65535
+    protocol    = "tcp"
+    self        = true
+  }
+
+  # By default, AWS creates an ALLOW ALL egress rule when creating a new Security Group inside of a VPC.
+  # When creating a new Security Group inside a VPC, Terraform will remove this default rule,
+  # and require you specifically re-create it if you desire that rule.
+  egress {
+    description      = "Allow outbound traffic"
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1" # semantically equivalent to all ports
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+  }
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+      name       = "${local.base_prefix}-sagemaker-sg"
+    }
+  )
+}
+
+# Lambda Security Group
+resource "aws_security_group" "lambda_sg" {
+  name        = "${local.base_prefix}-lambda-sg"
+  description = "Security group for Lambda functions"
+  vpc_id      = module.spoke_vpc.vpc_attributes.id
+
+  # Allow all outbound traffic by default
+  egress {
+    description      = "Allow all outbound traffic"
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+  }
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+      name       = "${local.base_prefix}-lambda-sg"
+    }
+  )
+}
+
+# OpenSearch Security Group - without inline rules to avoid circular dependency
+resource "aws_security_group" "opensearch_sg" {
+  name        = "${local.base_prefix}-opensearch-sg"
+  description = "Security group for OpenSearch domain within project VPC"
+  vpc_id      = module.spoke_vpc.vpc_attributes.id
+
+  ingress {
+    description = "HTTPS access from Lambda functions"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    security_groups = [aws_security_group.lambda_sg.id]
+  }
+
+  ingress {
+    description = "HTTPS access from SageMaker domain"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    security_groups = [aws_security_group.sagemaker_sg.id]
+  }
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+      name       = "${local.base_prefix}-opensearch-sg"
     }
   )
 }
@@ -587,6 +1764,114 @@ module "vpc_endpoints" {
   endpoint_names = var.endpoint_names
   tags           = merge(var.tags, { provisoner = local.resource_provisioner })
 }
+
+</content>
+
+<content full_path="base/roles_lex.tf">
+resource "aws_iam_policy" "lex_exec_policy_base" {
+  name        = local.policy_lex_base
+  description = "The lex policy for its execution"
+  policy      = local.lex_policy
+}
+
+resource "aws_iam_role" "lex_exec_role" {
+  name               = local.role_lex
+  assume_role_policy = data.aws_iam_policy_document.lex_assume_role_policy.json
+}
+
+resource "aws_iam_role_policy_attachment" "attach_lex_exec_policy" {
+  role       = aws_iam_role.lex_exec_role.name
+  policy_arn = aws_iam_policy.lex_exec_policy_base.arn
+}
+
+</content>
+
+<content full_path="base/param_store_values.tf">
+# Parameter Store values addition
+resource "aws_ssm_parameter" "workspace_bucket_arn" {
+  name  = "/params/${local.base_prefix}/platform/workspace-bucket-arn"
+  type  = "String"
+  value = module.s3_bucket.workspace_bucket_arn
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+resource "aws_ssm_parameter" "byod_bucket_arn" {
+  name  = "/params/${local.base_prefix}/platform/byod-bucket-arn"
+  type  = "String"
+  value = module.s3_bucket.byod_bucket_arn
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+resource "aws_ssm_parameter" "service_bucket_arn" {
+  name  = "/params/${local.base_prefix}/platform/service-bucket-arn"
+  type  = "String"
+  value = module.s3_bucket.service_bucket_arn
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+resource "aws_ssm_parameter" "workspace_ecr_arn" {
+  name  = "/params/${local.base_prefix}/platform/workspace-ecr-arn"
+  type  = "String"
+  value = aws_ecr_repository.base_ecr_repository.arn
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+resource "aws_ssm_parameter" "vpc_id" {
+  name  = "/params/${local.base_prefix}/platform/vpc-id"
+  type  = "String"
+  value = module.spoke_vpc.vpc_attributes.id
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+</content>
+
+<content full_path="base/roles_glue.tf">
+
+resource "aws_iam_policy" "glue_exec_policy_base" {
+  name        = local.policy_glue_base
+  description = "The glue policy for its execution"
+  policy      = local.glue_policy
+}
+#
+resource "aws_iam_role" "glue_exec_role" {
+  name                = local.role_glue
+  assume_role_policy  = data.aws_iam_policy_document.glue_assume_role_policy.json
+}
+
+resource "aws_iam_role_policy_attachment" "attach_glue_exec_policy" {
+  role       = aws_iam_role.glue_exec_role.name
+  policy_arn = aws_iam_policy.glue_exec_policy_base.arn
+}
+
 </content>
 
 <content full_path="base/variables.tf">
@@ -624,6 +1909,26 @@ variable "aws_account_id" {
 }
 </content>
 
+<content full_path="base/role_bedrock_kb.tf">
+# IAM Role for Bedrock and Lambda
+resource "aws_iam_role" "bedrock_kb_role" {
+  name = local.bedrock_kb_role_name
+  assume_role_policy = data.aws_iam_policy_document.bedrock_assume_role_policy.json
+}
+
+# IAM Policy for S3 and OpenSearch access
+resource "aws_iam_policy" "bedrock_kb_policy" {
+  name        = local.bedrock_kb_policy_name
+  description = "Policy to allow bedrock knowledge base access to S3 and OpenSearch"
+  policy      = local.bedrock_kb_policy
+}
+
+resource "aws_iam_role_policy_attachment" "attach_bedrock_kb_policy" {
+  role       = aws_iam_role.bedrock_kb_role.name
+  policy_arn = aws_iam_policy.bedrock_kb_policy.arn
+}
+</content>
+
 <content full_path="base/provider.tf">
 terraform {
   required_providers {
@@ -651,6 +1956,41 @@ provider "aws" {
   #   assume_role {
   #     role_arn = "arn:aws:iam::${var.aws_account_id}:role/uais_admin_access_role"
   #   }
+}
+</content>
+
+<content full_path="base/role_opensearch.tf">
+resource "aws_iam_role" "opensearch_master_role" {
+  name               = "${local.base_prefix}-opensearch-master-role"
+  path               = "/"
+  assume_role_policy = data.aws_iam_policy_document.opensearch_master_assume_role_policy.json
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+# Minimal IAM policy for OpenSearch master role (authentication only)
+# Fine-grained access control handles authorization within OpenSearch
+resource "aws_iam_policy" "opensearch_master_policy" {
+  name        = local.opensearch_policy_name
+  description = "Minimal policy for OpenSearch master role authentication"
+  policy      = local.opensearch_master_policy
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+resource "aws_iam_role_policy_attachment" "attach_opensearch_master_policy" {
+  role       = aws_iam_role.opensearch_master_role.name
+  policy_arn = aws_iam_policy.opensearch_master_policy.arn
 }
 </content>
 
@@ -703,6 +2043,22 @@ resource "aws_vpc_endpoint_route_table_association" "s3_vpce_route_table_associa
   route_table_id  = each.value.id
   vpc_endpoint_id = aws_vpc_endpoint.vpc_s3_endpoint.id
 }
+
+# Add a Gateway VPC Endpoint for DynamoDB
+resource "aws_vpc_endpoint" "vpc_dynamodb_endpoint" {
+  vpc_id            = var.vpc.vpc_attributes.id
+  service_name      = "com.amazonaws.${data.aws_region.region.name}.dynamodb"
+  vpc_endpoint_type = "Gateway"
+  tags              = var.tags
+}
+
+# Associate the DynamoDB Gateway endpoint with private route tables
+resource "aws_vpc_endpoint_route_table_association" "dynamodb_vpce_route_table_association" {
+  for_each        = var.vpc.rt_attributes_by_type_by_az.private
+  route_table_id  = each.value.id
+  vpc_endpoint_id = aws_vpc_endpoint.vpc_dynamodb_endpoint.id
+}
+
 </content>
 
 <content full_path="base/endpoints/variables.tf">
@@ -729,6 +2085,173 @@ variable "endpoint_names" {
 variable "tags" {
   type        = map(string)
   description = "Tags to apply to resources."
+}
+</content>
+
+<content full_path="base/policies/glue/glue.tpl">
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "RestrictGlueDatabaseAndTableAccessForCrawler",
+      "Effect": "Allow",
+      "Action": [
+        "glue:GetDatabase",
+        "glue:GetTable",
+        "glue:UpdateTable",
+        "glue:CreateTable",
+        "glue:GetPartitions"
+      ],
+      "Resource": [
+        "${glue_catalog_database_arn}",
+        "${glue_catalog_table_arn}/*"
+      ]
+    },
+    {
+      "Sid": "AllowCatalogLevelReadAndCreateAccessForCrawler",
+      "Effect": "Allow",
+      "Action": [
+        "glue:GetDatabase",
+        "glue:GetTable",
+        "glue:CreateTable",
+        "glue:GetPartitions"
+      ],
+      "Resource": "${param_store_allow_catalog_read_and_create_for_crawler_arn}"
+    },
+    {
+      "Sid": "AllowS3AccessForGlueJob",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "${workspace_bucket_arn}",
+        "${workspace_bucket_arn}/*",
+        "${service_bucket_arn}/*"
+      ]
+    },
+    {
+      "Sid": "AllowCloudWatchLogsForGlueJob",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": [
+        "${glue_log_group_arn}"
+      ]
+    }
+  ]
+}
+</content>
+
+<content full_path="base/policies/lex/lex.tpl">
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowLambdaInvocationForLex",
+      "Effect": "Allow",
+      "Action": "lambda:InvokeFunction",
+      "Resource": "${param_store_allow_lambda_invocation_for_lex_resource_arn}"
+    },
+    {
+      "Sid": "AllowCloudWatchLogsForLex",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "${param_store_allow_cloudwatch_logs_for_lex_resource_arn}"
+    }
+  ]
+}
+
+</content>
+
+<content full_path="base/policies/opensearch/opensearch_master.tpl">
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowOpenSearchDomainAccess",
+      "Effect": "Allow",
+      "Action": [
+        "es:*"
+      ],
+      "Resource": "${opensearch_domain_arn}"
+    },
+    {
+      "Sid": "AllowOpenSearchServiceAccess",
+      "Effect": "Allow",
+      "Action": [
+        "es:DescribeDomains",
+        "es:ListTags",
+        "es:DescribeDomainHealth"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowKMSAccess",
+      "Effect": "Allow",
+      "Action": [
+        "kms:Decrypt",
+        "kms:GenerateDataKey",
+        "kms:CreateGrant"
+      ],
+      "Resource": "${base_kms_arn}"
+    }
+  ]
+}
+</content>
+
+<content full_path="base/policies/bedrock_kb/bedrock_kb_custom.tpl">
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:ListBucket",
+        "s3:PutObject"
+      ],
+      "Resource": [
+        "${workspace_bucket_arn}",
+        "${workspace_bucket_arn}/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "aoss:APIAccessAll"
+      ],
+      "Resource": "${aoss_arn}"
+    },
+    {
+      "Action": [
+        "kms:Decrypt",
+        "kms:GenerateDataKey",
+        "kms:CreateGrant"
+      ],
+      "Effect": "Allow",
+      "Resource": "${base_kms_arn}"
+    },
+    {
+      "Sid": "BedrockInvokeModelStatement",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel"
+      ],
+      "Resource": [
+        "${embedding_model_arn}"
+      ]
+    }
+  ]
 }
 </content>
 
@@ -760,55 +2283,115 @@ variable "tags" {
 
 <content full_path="base/policies/lambda/ai.json.tpl">
 {
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Sid": "VisualEditor0",
-            "Effect": "Allow",
-            "Action": [
-                "ssm:GetParametersByPath",
-                "ssm:GetParameters",
-                "ssm:GetParameter"
-            ],
-            "Resource": "${param_store_resource_arn}"
-        }
-    ]
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Effect": "Deny",
+			"Action": [
+				"neptune-db:ManageStatistics",
+				"neptune-db:ResetDatabase",
+				"neptune-db:DeleteStatistics"
+			],
+			"Resource": "${neptune_resource_arn}"
+		}
+	]
 }
 </content>
 
 <content full_path="base/policies/lambda/monitoring.json.tpl">
 {
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Sid": "VisualEditor0",
-            "Effect": "Allow",
-            "Action": [
-                "ssm:GetParametersByPath",
-                "ssm:GetParameters",
-                "ssm:GetParameter"
-            ],
-            "Resource": "${param_store_resource_arn}"
-        }
-    ]
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Effect": "Deny",
+			"Action": [
+				"logs:DeleteSubscriptionFilter",
+				"logs:DeleteIntegration",
+				"logs:DeleteDeliveryDestinationPolicy",
+				"logs:CreateLogStream",
+				"logs:CreateLogAnomalyDetector",
+				"logs:CancelExportTask",
+				"logs:DeleteRetentionPolicy",
+				"logs:DeleteTransformer",
+				"logs:PutIndexPolicy",
+				"logs:PutDataProtectionPolicy",
+				"logs:UpdateAnomaly",
+				"logs:DeleteDeliverySource",
+				"logs:DeleteQueryDefinition",
+				"logs:PutDeliverySource",
+				"logs:CreateLogGroup",
+				"logs:PutIntegration",
+				"logs:Link",
+				"logs:CreateLogDelivery",
+				"logs:PutMetricFilter",
+				"logs:PutResourcePolicy",
+				"logs:UpdateLogDelivery",
+				"logs:UpdateDeliveryConfiguration",
+				"logs:PutDeliveryDestinationPolicy",
+				"logs:PutSubscriptionFilter",
+				"logs:DeleteDelivery",
+				"logs:DeleteDataProtectionPolicy",
+				"logs:CreateDelivery",
+				"logs:DeleteLogStream",
+				"logs:DeleteAccountPolicy",
+				"logs:CreateExportTask",
+				"logs:UpdateLogAnomalyDetector",
+				"logs:DeleteResourcePolicy",
+				"logs:DeleteMetricFilter",
+				"logs:AssociateKmsKey",
+				"logs:DeleteLogDelivery",
+				"logs:DeleteLogAnomalyDetector",
+				"logs:DeleteDeliveryDestination",
+				"logs:PutDestination",
+				"logs:DisassociateKmsKey",
+				"logs:DeleteLogGroup",
+				"logs:PutDestinationPolicy",
+				"logs:PutQueryDefinition",
+				"logs:DeleteDestination",
+				"logs:PutAccountPolicy",
+				"logs:PutLogEvents",
+				"logs:PutDeliveryDestination",
+				"logs:DeleteIndexPolicy",
+				"logs:PutTransformer",
+				"logs:PutRetentionPolicy"
+			],
+			"Resource": "*"
+		}
+	]
 }
 </content>
 
 <content full_path="base/policies/lambda/secret.json.tpl">
 {
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Sid": "VisualEditor0",
-            "Effect": "Allow",
-            "Action": [
-                "ssm:GetParametersByPath",
-                "ssm:GetParameters",
-                "ssm:GetParameter"
-            ],
-            "Resource": "${param_store_resource_arn}"
-        }
-    ]
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Sid": "ReadPermissionOnPlatformParameterStore",
+			"Effect": "Allow",
+			"Action": [
+				"ssm:GetParametersByPath",
+				"ssm:GetParameters",
+				"ssm:GetParameter"
+			],
+			"Resource": "${param_store_resource_arn_read}"
+		},
+		{
+			"Sid": "AllPermissionOnApplicationParameterStore",
+			"Effect": "Allow",
+			"Action": "ssm:*",
+			"Resource": "${param_store_resource_arn_write}"
+		},
+		{
+			"Sid": "DenyPermissionOnParameterStore",
+			"Effect": "Deny",
+			"Action": [
+				"ssm:DeleteResourcePolicy",
+				"ssm:PutResourcePolicy",
+				"ssm:ModifyDocumentPermission"
+			],
+			"Resource": "${param_store_resource_arn_write}"
+		}
+	]
 }
 </content>
 
@@ -816,14 +2399,25 @@ variable "tags" {
 {
 	"Version": "2012-10-17",
 	"Statement": [
-		{
-			"Effect": "Deny",
-			"Action": [
-				"dynamodb:DeleteResourcePolicy",
-				"dynamodb:PutResourcePolicy",
-				"dynamodb:UpdateAbacStatus"
-			],
-            "Resource": "${dynamodb_resource_arn}"
+		 {
+              "Sid": "AllowDynamoDBFullAccess",
+              "Effect": "Allow",
+              "Action": "dynamodb:*",
+              "Resource": "${policy_lambda_arn_dynamodb}",
+              "Condition": {
+                      "ArnEquals": {
+                        "aws:SourceArn": ${lambda_resource_arn}
+                      }
+                    }
+            },
+            {
+              "Sid": "DenyDynamoDBSpecificActions",
+              "Effect": "Deny",
+              "Action": [
+                "dynamodb:Scan",
+                "dynamodb:ExportTableToPointInTime"
+              ],
+            "Resource": "${policy_lambda_arn_dynamodb}",
 		}
 	]
 }
@@ -924,6 +2518,23 @@ variable "tags" {
       "Resource": "*"
     },
     {
+      "Effect": "Allow",
+      "Action": [
+        "aoss:APIAccessAll"
+      ],
+      "Resource": "${aoss_arn}"
+    },
+    {
+        "Sid": "ReadPermissionOnPlatformParameterStore",
+        "Effect": "Allow",
+        "Action": [
+            "ssm:GetParametersByPath",
+            "ssm:GetParameters",
+            "ssm:GetParameter"
+        ],
+        "Resource": "${param_store_resource_arn_read}"
+    },
+    {
       "Effect": "Deny",
       "Action": [
         "sagemaker:CreateModel",
@@ -963,7 +2574,7 @@ tags = {
 
 endpoint_names = ["ecr.api", "ecr.dkr", "logs", "ssm", "ssmmessages", "ec2messages", "sagemaker.api", "secretsmanager", "sagemaker.runtime",
   "sagemaker.featurestore-runtime", "servicecatalog", "forecast", "forecastquery", "rekognition", "textract", "comprehend", "sts", "redshift-data",
-"athena", "glue", "codewhisperer"]
+"athena", "glue", "codewhisperer", "bedrock", "bedrock-agent", "bedrock-agent-runtime"]
 
 </content>
 

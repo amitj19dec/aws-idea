@@ -85,6 +85,7 @@ Directory Structure:
 │   ├── ./managed-opensearch/main.tf
 │   ├── ./managed-opensearch/outputs.tf
 │   └── ./managed-opensearch/variables.tf
+├── ./repo-to-text_2025-08-09-09-44-31-UTC.txt
 └── ./sagemaker-infra
     ├── ./sagemaker-infra/data.tf
     ├── ./sagemaker-infra/inputs
@@ -1620,11 +1621,32 @@ locals {
 
   lambda_policy_secret = templatefile("${local.policy_lambda_template_path}/secret.json.tpl", {
     param_store_resource_arn_read  = local.policy_lambda_arn_ssm_read,
-    param_store_resource_arn_write = local.policy_lambda_arn_ssm_write
+    param_store_resource_arn_write = local.policy_lambda_arn_ssm_write,
+    base_kms_arn                   = aws_kms_key.base_kms_key.arn,
+    aws_region                     = var.aws_region,
+    workspace_bucket_arn           = module.s3_bucket.workspace_bucket_arn,
+    byod_bucket_arn                = module.s3_bucket.byod_bucket_arn,
+    service_bucket_arn             = module.s3_bucket.service_bucket_arn
   })
+
+  # Bedrock ARN patterns for Lambda
+  bedrock_model_arn = format("${local.policy_arn_prefix}::foundation-model/*", "bedrock")
+  bedrock_kb_arn = format("${local.policy_arn_prefix}:knowledge-base/*", "bedrock")
+  bedrock_agent_arn = format("${local.policy_arn_prefix}:agent/*", "bedrock")
+  bedrock_agent_alias_arn = format("${local.policy_arn_prefix}:agent-alias/*", "bedrock")
+  bedrock_guardrail_arn = format("${local.policy_arn_prefix}:guardrail/*", "bedrock")
 
   lambda_policy_ai = templatefile("${local.policy_lambda_template_path}/ai.json.tpl", {
     neptune_resource_arn = local.policy_lambda_arn_neptune_write,
+    opensearch_domain_arn = local.opensearch_domain_arn,
+    sagemaker_endpoint_arn = format("${local.policy_arn_prefix}:endpoint/${local.base_prefix}-*", "sagemaker"),
+    sagemaker_transform_job_arn = format("${local.policy_arn_prefix}:transform-job/${local.base_prefix}-*", "sagemaker"),
+    sagemaker_feature_group_arn = format("${local.policy_arn_prefix}:feature-group/${local.base_prefix}-*", "sagemaker"),
+    bedrock_model_arn = local.bedrock_model_arn,
+    bedrock_kb_arn = local.bedrock_kb_arn,
+    bedrock_agent_arn = local.bedrock_agent_arn,
+    bedrock_agent_alias_arn = local.bedrock_agent_alias_arn,
+    bedrock_guardrail_arn = local.bedrock_guardrail_arn
   })
 
   lambda_policy_monitoring = templatefile("${local.policy_lambda_template_path}/monitoring.json.tpl", {})
@@ -2516,6 +2538,7 @@ variable "tags" {
 	"Version": "2012-10-17",
 	"Statement": [
 		{
+			"Sid": "DenyNeptuneDestructiveActions",
 			"Effect": "Deny",
 			"Action": [
 				"neptune-db:ManageStatistics",
@@ -2523,6 +2546,179 @@ variable "tags" {
 				"neptune-db:DeleteStatistics"
 			],
 			"Resource": "${neptune_resource_arn}"
+		},
+		{
+			"Sid": "AllowOpenSearchAccess",
+			"Effect": "Allow",
+			"Action": [
+				"es:ESHttpGet",
+				"es:ESHttpPost",
+				"es:ESHttpPut",
+				"es:ESHttpDelete",
+				"es:ESHttpHead",
+				"es:ESHttpPatch"
+			],
+			"Resource": "${opensearch_domain_arn}"
+		},
+		{
+			"Sid": "AllowOpenSearchDescribe",
+			"Effect": "Allow",
+			"Action": [
+				"es:DescribeDomain",
+				"es:DescribeDomains",
+				"es:DescribeDomainConfig"
+			],
+			"Resource": "${opensearch_domain_arn}"
+		},
+		{
+			"Sid": "AllowSageMakerEndpointInvocation",
+			"Effect": "Allow",
+			"Action": [
+				"sagemaker:InvokeEndpoint",
+				"sagemaker:InvokeEndpointAsync"
+			],
+			"Resource": "${sagemaker_endpoint_arn}"
+		},
+		{
+			"Sid": "AllowSageMakerEndpointOperations",
+			"Effect": "Allow",
+			"Action": [
+				"sagemaker:DescribeEndpoint",
+				"sagemaker:DescribeEndpointConfig",
+				"sagemaker:ListEndpoints",
+				"sagemaker:ListEndpointConfigs"
+			],
+			"Resource": "*"
+		},
+		{
+			"Sid": "AllowSageMakerModelOperations",
+			"Effect": "Allow",
+			"Action": [
+				"sagemaker:DescribeModel",
+				"sagemaker:ListModels"
+			],
+			"Resource": "*"
+		},
+		{
+			"Sid": "AllowSageMakerBatchOperations",
+			"Effect": "Allow",
+			"Action": [
+				"sagemaker:CreateTransformJob",
+				"sagemaker:DescribeTransformJob",
+				"sagemaker:ListTransformJobs",
+				"sagemaker:StopTransformJob"
+			],
+			"Resource": "${sagemaker_transform_job_arn}"
+		},
+		{
+			"Sid": "AllowSageMakerFeatureStoreOperations",
+			"Effect": "Allow",
+			"Action": [
+				"sagemaker:GetRecord",
+				"sagemaker:BatchGetRecord"
+			],
+			"Resource": "${sagemaker_feature_group_arn}"
+		},
+		{
+			"Sid": "AllowSageMakerTagOperations",
+			"Effect": "Allow",
+			"Action": [
+				"sagemaker:ListTags"
+			],
+			"Resource": "*"
+		},
+		{
+			"Sid": "DenySageMakerEndpointCreation",
+			"Effect": "Deny",
+			"Action": [
+				"sagemaker:CreateModel",
+				"sagemaker:CreateEndpointConfig",
+				"sagemaker:CreateEndpoint",
+				"sagemaker:UpdateEndpoint",
+				"sagemaker:DeleteModel",
+				"sagemaker:DeleteEndpointConfig",
+				"sagemaker:DeleteEndpoint"
+			],
+			"Resource": "*"
+		},
+		{
+			"Sid": "AllowBedrockModelInvocation",
+			"Effect": "Allow",
+			"Action": [
+				"bedrock:InvokeModel",
+				"bedrock:InvokeModelWithResponseStream"
+			],
+			"Resource": "${bedrock_model_arn}"
+		},
+		{
+			"Sid": "AllowBedrockKnowledgeBaseOperations",
+			"Effect": "Allow",
+			"Action": [
+				"bedrock:Retrieve",
+				"bedrock:RetrieveAndGenerate"
+			],
+			"Resource": "${bedrock_kb_arn}"
+		},
+		{
+			"Sid": "AllowBedrockKnowledgeBaseRead",
+			"Effect": "Allow",
+			"Action": [
+				"bedrock:GetKnowledgeBase",
+				"bedrock:ListKnowledgeBases",
+				"bedrock:GetDataSource",
+				"bedrock:ListDataSources"
+			],
+			"Resource": "*"
+		},
+		{
+			"Sid": "AllowBedrockAgentOperations",
+			"Effect": "Allow",
+			"Action": [
+				"bedrock:InvokeAgent"
+			],
+			"Resource": [
+				"${bedrock_agent_arn}",
+				"${bedrock_agent_alias_arn}"
+			]
+		},
+		{
+			"Sid": "AllowBedrockAgentRead",
+			"Effect": "Allow",
+			"Action": [
+				"bedrock:GetAgent",
+				"bedrock:ListAgents",
+				"bedrock:GetAgentAlias",
+				"bedrock:ListAgentAliases"
+			],
+			"Resource": "*"
+		},
+		{
+			"Sid": "AllowBedrockModelDiscovery",
+			"Effect": "Allow",
+			"Action": [
+				"bedrock:ListFoundationModels",
+				"bedrock:GetFoundationModel",
+				"bedrock:ListCustomModels",
+				"bedrock:GetCustomModel"
+			],
+			"Resource": "*"
+		},
+		{
+			"Sid": "AllowBedrockGuardrails",
+			"Effect": "Allow",
+			"Action": [
+				"bedrock:ApplyGuardrail"
+			],
+			"Resource": "${bedrock_guardrail_arn}"
+		},
+		{
+			"Sid": "AllowBedrockGuardrailsRead",
+			"Effect": "Allow",
+			"Action": [
+				"bedrock:GetGuardrail",
+				"bedrock:ListGuardrails"
+			],
+			"Resource": "*"
 		}
 	]
 }
@@ -2620,6 +2816,92 @@ variable "tags" {
 				"ssm:ModifyDocumentPermission"
 			],
 			"Resource": "${param_store_resource_arn_write}"
+		},
+		{
+			"Sid": "AllowKMSDecryptForS3Buckets",
+			"Effect": "Allow",
+			"Action": [
+				"kms:Decrypt",
+				"kms:DescribeKey"
+			],
+			"Resource": "${base_kms_arn}",
+			"Condition": {
+				"StringEquals": {
+					"kms:ViaService": "s3.${aws_region}.amazonaws.com",
+					"kms:EncryptionContext:aws:s3:arn": [
+						"${workspace_bucket_arn}",
+						"${byod_bucket_arn}",
+						"${service_bucket_arn}"
+					]
+				}
+			}
+		},
+		{
+			"Sid": "AllowKMSGenerateDataKeyForS3Buckets",
+			"Effect": "Allow",
+			"Action": [
+				"kms:GenerateDataKey",
+				"kms:GenerateDataKeyWithoutPlaintext"
+			],
+			"Resource": "${base_kms_arn}",
+			"Condition": {
+				"StringEquals": {
+					"kms:ViaService": "s3.${aws_region}.amazonaws.com",
+					"kms:EncryptionContext:aws:s3:arn": [
+						"${workspace_bucket_arn}",
+						"${byod_bucket_arn}",
+						"${service_bucket_arn}"
+					]
+				}
+			}
+		},
+		{
+			"Sid": "AllowKMSCreateGrantForS3Buckets",
+			"Effect": "Allow",
+			"Action": [
+				"kms:CreateGrant"
+			],
+			"Resource": "${base_kms_arn}",
+			"Condition": {
+				"Bool": {
+					"kms:GrantIsForAWSResource": "true"
+				},
+				"StringEquals": {
+					"kms:ViaService": "s3.${aws_region}.amazonaws.com",
+					"kms:EncryptionContext:aws:s3:arn": [
+						"${workspace_bucket_arn}",
+						"${byod_bucket_arn}",
+						"${service_bucket_arn}"
+					]
+				}
+			}
+		},
+		{
+			"Sid": "AllowKMSDecryptForOtherServices",
+			"Effect": "Allow",
+			"Action": [
+				"kms:Decrypt",
+				"kms:DescribeKey"
+			],
+			"Resource": "${base_kms_arn}",
+			"Condition": {
+				"StringEquals": {
+					"kms:ViaService": [
+						"ssm.${aws_region}.amazonaws.com",
+						"secretsmanager.${aws_region}.amazonaws.com",
+						"dynamodb.${aws_region}.amazonaws.com"
+					]
+				}
+			}
+		},
+		{
+			"Sid": "AllowKMSListOperations",
+			"Effect": "Allow",
+			"Action": [
+				"kms:ListKeys",
+				"kms:ListAliases"
+			],
+			"Resource": "*"
 		}
 	]
 }

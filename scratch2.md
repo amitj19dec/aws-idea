@@ -467,3 +467,257 @@ if __name__ == "__main__":
     result = lambda_handler(test_event, None)
     print(json.dumps(result, indent=2))
 ```
+
+
+## **Step-by-Step Lambda Deployment Guide via AWS Console**
+```
+### **Prerequisites Check**
+First, verify these resources exist in your account:
+- IAM Role: `uais-aaf481b1-lambda-domain-exec-role`
+- VPC: `uais-aaf481b1-vpc`
+- Security Group: `uais-aaf481b1-lambda-sg`
+- Parameter Store values under `/params/uais-aaf481b1/platform/`
+
+---
+
+### **Step 1: Prepare the Lambda Code**
+
+1. **Create a local file** named `lambda_function.py` with the code you provided
+2. **Create a ZIP file**:
+   ```bash
+   zip lambda_deployment.zip lambda_function.py
+   ```
+   
+   Or if you're on Windows:
+   - Right-click the `lambda_function.py` file
+   - Select "Send to" → "Compressed (zipped) folder"
+
+---
+
+### **Step 2: Create Lambda Function in AWS Console**
+
+1. **Navigate to Lambda**:
+   - Go to AWS Console → Services → Lambda
+   - Click **"Create function"**
+
+2. **Basic Information**:
+   - Choose: **"Author from scratch"**
+   - Function name: `uais-aaf481b1-comprehensive-qa-test`
+   - Runtime: **Python 3.9**
+   - Architecture: **x86_64**
+
+3. **Permissions**:
+   - Expand "Change default execution role"
+   - Select: **"Use an existing role"**
+   - Choose role: **`uais-aaf481b1-lambda-domain-exec-role`**
+   
+4. Click **"Create function"**
+
+---
+
+### **Step 3: Upload Code**
+
+1. In the Lambda function page, under **"Code source"**:
+   - Click **"Upload from"** → **".zip file"**
+   - Click **"Upload"** and select your `lambda_deployment.zip`
+   - Click **"Save"**
+
+---
+
+### **Step 4: Configure VPC Settings**
+
+1. Go to **"Configuration"** tab → **"VPC"**
+2. Click **"Edit"**
+3. Configure:
+   - **VPC**: Select `uais-aaf481b1-vpc`
+   - **Subnets**: Select the subnets named `uais-aaf481b1-endpoints-*` (select at least 2)
+   - **Security groups**: Select `uais-aaf481b1-lambda-sg`
+4. Click **"Save"**
+
+---
+
+### **Step 5: Configure General Settings**
+
+1. Go to **"Configuration"** → **"General configuration"**
+2. Click **"Edit"**
+3. Set:
+   - **Memory**: `1024 MB`
+   - **Timeout**: `5 min 0 sec` (or enter 300 seconds)
+   - **Ephemeral storage**: Keep default (512 MB)
+4. Click **"Save"**
+
+---
+
+### **Step 6: Add Required Dependencies (Important!)**
+
+Since the code uses `requests` library for OpenSearch, you need to add it:
+
+**Option A: Quick Fix (Modify Code)**
+1. Go to **"Code"** tab
+2. Comment out the OpenSearch test section or replace with boto3 calls:
+
+```python
+def test_opensearch(self, query_id: str, question: str, answer: str) -> bool:
+    """Test 5: OpenSearch - Store and search documents"""
+    try:
+        # Simplified version without requests library
+        # Just verify we can describe the domain
+        domain_name = f'{self.project_prefix}-opensearch'
+        response = self.opensearch.describe_domain(DomainName=domain_name)
+        logger.info(f"OpenSearch domain status: {response['DomainStatus']['Processing']}")
+        return True
+    except Exception as e:
+        logger.error(f"OpenSearch test failed: {e}")
+        return False
+```
+
+**Option B: Create Layer (Advanced)**
+1. On your local machine:
+   ```bash
+   mkdir python
+   pip install requests -t python/
+   zip -r requests-layer.zip python
+   ```
+2. In Lambda console → Layers → Create layer
+3. Upload the zip and attach to your function
+
+---
+
+### **Step 7: Create Test Event**
+
+1. In the Lambda function, go to **"Test"** tab
+2. Click **"Create new event"**
+3. Event name: `TestDocumentQA`
+4. Event JSON:
+```json
+{
+  "question": "What are the best practices for deploying ML models in production?"
+}
+```
+5. Click **"Save"**
+
+---
+
+### **Step 8: Test the Function**
+
+1. Click **"Test"** button
+2. Monitor the execution results
+3. Check **"Monitor"** tab → **"View CloudWatch logs"** for detailed logs
+
+---
+
+### **Step 9: Troubleshooting Common Issues**
+
+**If you get timeout errors:**
+- Some services might not be provisioned yet
+- Add try-catch blocks around each service test
+
+**If you get permission errors:**
+- Verify the Lambda execution role has all 5 policies attached
+- Check in IAM → Roles → `uais-aaf481b1-lambda-domain-exec-role`
+
+**If VPC connectivity fails:**
+- Ensure VPC endpoints are created for all services
+- Check security group allows outbound HTTPS (443)
+
+---
+
+### **Step 10: Simplified Test Version**
+
+For initial testing, here's a minimal version that tests core services:
+
+```python
+import json
+import boto3
+from datetime import datetime
+import logging
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+def lambda_handler(event, context):
+    """Simplified test for core services"""
+    
+    project_prefix = 'uais-aaf481b1'
+    results = {}
+    
+    # Test 1: Parameter Store
+    try:
+        ssm = boto3.client('ssm')
+        param = ssm.get_parameter(
+            Name=f'/params/{project_prefix}/platform/vpc-id'
+        )
+        results['parameter_store'] = 'success'
+        logger.info(f"VPC ID: {param['Parameter']['Value']}")
+    except Exception as e:
+        results['parameter_store'] = f'failed: {str(e)}'
+    
+    # Test 2: DynamoDB
+    try:
+        dynamodb = boto3.resource('dynamodb')
+        table_name = f'{project_prefix}-test-table'
+        
+        # Try to create table
+        table = dynamodb.create_table(
+            TableName=table_name,
+            KeySchema=[
+                {'AttributeName': 'id', 'KeyType': 'HASH'}
+            ],
+            AttributeDefinitions=[
+                {'AttributeName': 'id', 'AttributeType': 'S'}
+            ],
+            BillingMode='PAY_PER_REQUEST'
+        )
+        results['dynamodb'] = 'table created'
+    except dynamodb.meta.client.exceptions.ResourceInUseException:
+        results['dynamodb'] = 'table exists'
+    except Exception as e:
+        results['dynamodb'] = f'failed: {str(e)}'
+    
+    # Test 3: Bedrock
+    try:
+        bedrock = boto3.client('bedrock-runtime')
+        response = bedrock.invoke_model(
+            modelId='amazon.titan-text-lite-v1',
+            contentType='application/json',
+            accept='application/json',
+            body=json.dumps({
+                'inputText': 'Hello, this is a test',
+                'textGenerationConfig': {
+                    'maxTokenCount': 50
+                }
+            })
+        )
+        results['bedrock'] = 'success'
+    except Exception as e:
+        results['bedrock'] = f'failed: {str(e)}'
+    
+    # Test 4: Write to application parameters
+    try:
+        ssm.put_parameter(
+            Name=f'/params/{project_prefix}/application/test-timestamp',
+            Value=datetime.now().isoformat(),
+            Type='String',
+            Overwrite=True
+        )
+        results['app_param_write'] = 'success'
+    except Exception as e:
+        results['app_param_write'] = f'failed: {str(e)}'
+    
+    return {
+        'statusCode': 200,
+        'body': json.dumps(results, indent=2)
+    }
+```
+
+---
+
+### **Next Steps After Successful Deployment**
+
+1. **Check CloudWatch Logs** for detailed execution logs
+2. **Verify DynamoDB** - Check if tables were created
+3. **Check Parameter Store** - Look for `/params/uais-aaf481b1/application/` values
+4. **Iterate and Enhance** - Add more service tests as needed
+
+This approach lets you test the infrastructure setup without dealing with complex dependencies initially!
+```

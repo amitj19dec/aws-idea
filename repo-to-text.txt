@@ -66,17 +66,6 @@ Directory Structure:
 │   ├── ./glue/main.tf
 │   ├── ./glue/provider.tf
 │   └── ./glue/variables.tf
-├── ./lambda
-│   ├── ./lambda/data.tf
-│   ├── ./lambda/inputs
-│   │   └── ./lambda/inputs/lambda-invoke-endpoint.tfvars
-│   ├── ./lambda/lambda_function.zip
-│   ├── ./lambda/lambda-function
-│   │   └── ./lambda/lambda-function/lambda_function.py
-│   ├── ./lambda/main.tf
-│   ├── ./lambda/outputs.tf
-│   ├── ./lambda/provider.tf
-│   └── ./lambda/variables.tf
 ├── ./managed-opensearch
 │   ├── ./managed-opensearch/data.tf
 │   ├── ./managed-opensearch/inputs
@@ -85,7 +74,7 @@ Directory Structure:
 │   ├── ./managed-opensearch/main.tf
 │   ├── ./managed-opensearch/outputs.tf
 │   └── ./managed-opensearch/variables.tf
-├── ./repo-to-text_2025-08-09-09-44-31-UTC.txt
+├── ./repo-to-text_2025-08-12-04-44-42-UTC.txt
 └── ./sagemaker-infra
     ├── ./sagemaker-infra/data.tf
     ├── ./sagemaker-infra/inputs
@@ -1208,207 +1197,6 @@ tags = {
   "environment"  = "dev",
   "service-tier" = "p2"
 }
-</content>
-
-<content full_path="lambda/data.tf">
-data "aws_caller_identity" "current" {}
-
-data "aws_region" "current" {}
-
-data "aws_iam_policy" "AmazonSageMakerFullAccess" {
-  name = "AmazonSageMakerFullAccess"
-}
-</content>
-
-<content full_path="lambda/outputs.tf">
-# Lambda Function
-output "lambda_function_arn" {
-  description = "The ARN of the Lambda Function"
-  value       = try(aws_lambda_function.my_lambda_function.arn, "")
-}
-
-</content>
-
-<content full_path="lambda/main.tf">
-resource "aws_iam_role" "lambda_role" {
-  name = "${var.project_id}-lambda-execution-role"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "lambda.amazonaws.com"
-        }
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy" "lambda_logs_policy" {
-  name = "${var.project_id}-lambda-logs-policy"
-  role = aws_iam_role.lambda_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = "logs:CreateLogGroup"
-        Resource = "arn:aws:logs:${var.lambda_aws_region}:${var.lambda_aws_account_id}:*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "logs:CreateLogStream",
-          "logs:PutLogEvents"
-        ]
-        Resource = [
-          "arn:aws:logs:${var.lambda_aws_region}:${var.lambda_aws_account_id}:log-group:/aws/lambda/*"
-        ]
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy" "lambda_sagemaker_policy" {
-  name = "${var.project_id}-lambda-execution-role-policy"
-  role = aws_iam_role.lambda_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = "sagemaker:InvokeEndpoint"
-        Resource = "arn:aws:sagemaker:${var.lambda_aws_region}:${var.lambda_aws_account_id}:*"
-      }
-    ]
-  })
-}
-
-resource "aws_lambda_function" "my_lambda_function" {
-  filename         = "./lambda_function.zip"
-  description      = "This Lambda Function is used to Invoke the Model Endpoint for the given Model Endpoint name, Inference Component Name and the Request body"
-  function_name    = "lambda_fn_Invoke_Endpoint"
-  role             = aws_iam_role.lambda_role.arn
-  handler          = "lambda_function.lambda_handler"
-  runtime          = "python3.9"
-  source_code_hash = filebase64sha256("lambda_function.zip")
-
-  layers = [
-    "arn:aws:lambda:us-east-1:017000801446:layer:AWSLambdaPowertoolsPythonV2:46"
-  ]
-  timeout = 300
-}
-
-</content>
-
-<content full_path="lambda/lambda_function.zip">
-PK   Z               lambda_function.pyux ö     UT
- VïøgWïøgVïøg­RQoÚ0~Ï¯°xq2AVmÚ-¢ÓFªÁ[pëØí°¢ÿ¾³I ©Z¡IóK»ï;ßwß¢ÔÆm#qº­µÓ_'«Usz»jE¦RN@F'lKÊÅ´§m¡`Ï`hE±5=ÝûbqR'S!ØÌtv!ÃHV¬9[íâ9S®Or­¼¸d<;`ÅG^Ã¿?ô6ÏÁÚÁFËÁ­úÏ 3 CB?Ñþì÷SUö	|w°8p÷ÜNóÀËÓl6ï?dó
-´c>Îç2~È+ë*G	Aá#]k~ ËèªG%ÔFÇÞoÈAìólFNÜ!ymU:öÙ-µ²Þ²Æ$¡öúV x©ºwÆú3©£3VÀ¨n¨£Ë~ïçPºee)EÎÐê³ïvaõý¯bïPÿÈÇS^¥[Ò.rª6`@å0Ö¸¨
-ºmw³tùÎtV~æ8¢ðªÔÛ¸I=Ò»àGjp)â$åkq|èÏtª¿qÅUFµv6ìuÌUvåq¾ÜÜtÅÒÝy+ëÛ|Ø!iM®[?°§J:uëàiõÎÂ7LÂ]#Ì¸lqiümzc´AÝèUüz¿ý½|¬[h)ùPK4ëÿR  î  PK   Z4ëÿR  î                lambda_function.pyux ö     UT VïøgPK      X   c    
-</content>
-
-<content full_path="lambda/variables.tf">
-variable "lambda_aws_region" {
-  description = "AWS Region."
-  type        = string
-  default     = "us-east-1"
-}
-
-variable "lambda_aws_account_id" {
-  description = "AWS Account Id."
-  type        = string
-  default     = "982534393096"
-}
-
-variable "project_id" {
-  description = "Project ID"
-  type        = string
-}
-</content>
-
-<content full_path="lambda/provider.tf">
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-  }
-
-}
-
-provider "aws" {
-
-  #   access_key = var.aws_access_key
-  #   secret_key = var.aws_secret_key
-  region     = var.lambda_aws_region
-  #
-  #   assume_role {
-  #     role_arn = "arn:aws:iam::${var.aws_account_id}:role/uais_admin_access_role"
-  #   }
-}
-</content>
-
-<content full_path="lambda/lambda-function/lambda_function.py">
-import os
-import boto3
-import json
-import logging
-
-runtime = boto3.client('runtime.sagemaker')
-
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-
-def lambda_handler(event, context):
-    headers = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'OPTIONS,POST'
-    }
-
-    try:
-        json_string = event['body']
-
-        logger.info(f"Received JSON string: {json_string}")
-
-        response = runtime.invoke_endpoint(
-            EndpointName=event['EndpointName'],
-            Accept='application/json',
-            ContentType='application/json',
-            Body=json.dumps(json_string),
-            InferenceComponentName=event['inferenceComponentName'])
-
-        response_body = json.loads(response['Body'].read().decode())
-        logger.info(f"Response: {response_body}")
-
-        return {
-            'statusCode': 200,
-            'headers': headers,
-            'body': json.dumps({
-                'result': response_body
-            })
-        }
-
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return {
-            'statusCode': 500,
-            'headers': headers,
-            'body': json.dumps({'error': str(e)})
-        }
-</content>
-
-<content full_path="lambda/inputs/lambda-invoke-endpoint.tfvars">
-lambda_aws_region = "us-east-1"
-lambda_aws_account_id = "982534393096"
-project_id = "uais-test-terraform-testprj-id"
-
 </content>
 
 <content full_path="base/role_sagemaker.tf">
@@ -2915,21 +2703,13 @@ variable "tags" {
 			"Sid": "AllowDynamoDBFullAccess",
 			"Effect": "Allow",
 			"Action": "dynamodb:*",
-			"Resource": "${dynamodb_resource_arn}",
-			"Condition": {
-				"ArnEquals": {
-					"aws:SourceArn": "${lambda_resource_arn}"
-				}
-			}
+			"Resource": "${dynamodb_resource_arn}"
 		},
 		{
 			"Sid": "AllowCreateTable",
 			"Effect": "Allow",
 			"Action": "dynamodb:CreateTable",
 			"Condition": {
-				"ArnEquals": {
-					"aws:SourceArn": "${lambda_resource_arn}"
-				},
 				"StringLike": {
 					"dynamodb:TableName": "${table_prefix}*"
 				}

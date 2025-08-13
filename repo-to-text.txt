@@ -50,17 +50,6 @@ Directory Structure:
 │   │   ├── ./base/s3_bucket/variables.tf
 │   │   └── ./base/s3_bucket/workspace_bucket.tf
 │   └── ./base/variables.tf
-├── ./bedrock-kb
-│   ├── ./bedrock-kb/data.tf
-│   ├── ./bedrock-kb/inputs
-│   │   └── ./bedrock-kb/inputs/sandbox
-│   │       └── ./bedrock-kb/inputs/sandbox/982534393096_46de60f5-2b31-4fb7-9cbf-b728d5b104e3.tfvars
-│   ├── ./bedrock-kb/locals.tf
-│   ├── ./bedrock-kb/main.tf
-│   ├── ./bedrock-kb/outputs.tf
-│   ├── ./bedrock-kb/param_store_values.tf
-│   ├── ./bedrock-kb/provider.tf
-│   └── ./bedrock-kb/variables.tf
 ├── ./glue
 │   ├── ./glue/locals.tf
 │   ├── ./glue/main.tf
@@ -74,18 +63,27 @@ Directory Structure:
 │   ├── ./managed-opensearch/main.tf
 │   ├── ./managed-opensearch/outputs.tf
 │   └── ./managed-opensearch/variables.tf
-├── ./repo-to-text_2025-08-12-04-44-42-UTC.txt
-└── ./sagemaker-infra
-    ├── ./sagemaker-infra/data.tf
-    ├── ./sagemaker-infra/inputs
-    │   └── ./sagemaker-infra/inputs/sandbox
-    │       └── ./sagemaker-infra/inputs/sandbox/982534393096_46de60f5-2b31-4fb7-9cbf-b728d5b104e3.tfvars
-    ├── ./sagemaker-infra/locals.tf
-    ├── ./sagemaker-infra/main.tf
-    ├── ./sagemaker-infra/outputs.tf
-    ├── ./sagemaker-infra/param_store_values.tf
-    ├── ./sagemaker-infra/provider.tf
-    └── ./sagemaker-infra/variables.tf
+├── ./sagemaker-infra
+│   ├── ./sagemaker-infra/data.tf
+│   ├── ./sagemaker-infra/inputs
+│   │   └── ./sagemaker-infra/inputs/sandbox
+│   │       └── ./sagemaker-infra/inputs/sandbox/982534393096_46de60f5-2b31-4fb7-9cbf-b728d5b104e3.tfvars
+│   ├── ./sagemaker-infra/locals.tf
+│   ├── ./sagemaker-infra/main.tf
+│   ├── ./sagemaker-infra/outputs.tf
+│   ├── ./sagemaker-infra/param_store_values.tf
+│   ├── ./sagemaker-infra/provider.tf
+│   └── ./sagemaker-infra/variables.tf
+└── ./serverless-opensearch
+    ├── ./serverless-opensearch/data.tf
+    ├── ./serverless-opensearch/inputs
+    │   └── ./serverless-opensearch/inputs/sandbox
+    │       └── ./serverless-opensearch/inputs/sandbox/982534393096_46de60f5-2b31-4fb7-9cbf-b728d5b104e3.tfvars
+    ├── ./serverless-opensearch/locals.tf
+    ├── ./serverless-opensearch/main.tf
+    ├── ./serverless-opensearch/param_store_values.tf
+    ├── ./serverless-opensearch/provider.tf
+    └── ./serverless-opensearch/variables.tf
 
 </directory_structure>
 
@@ -149,6 +147,378 @@ provider "aws" {
   #   assume_role {
   #     role_arn = "arn:aws:iam::${var.aws_account_id}:role/uais_admin_access_role"
   #   }
+}
+</content>
+
+<content full_path="serverless-opensearch/data.tf">
+data "aws_caller_identity" "current" {}
+
+data "aws_region" "current" {}
+
+# the workspace bucket is used to store the raw data files
+# customer can bring data in byod bucket and apply transformations and then move transformed dat to workspace bucket
+# data "aws_s3_bucket" "raw_data_bucket" {
+#   bucket = local.raw_data_bucket_name
+# }
+
+data "aws_iam_role" "bedrock_kb_role" {
+  name = local.bedrock_kb_role_name
+}
+
+data "aws_kms_key" "base_kms_key" {
+  key_id = local.kms_key_alias
+}
+
+data "aws_vpc" "spoke_vpc" {
+  filter {
+    name   = "tag:Name"
+    values = ["${local.base_prefix}-vpc"]
+  }
+}
+
+data "aws_subnets" "endpoints_subnets" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.spoke_vpc.id]
+  }
+
+  filter {
+    name   = "tag:Name"
+    values = ["${local.base_prefix}-endpoints*"]
+  }
+}
+
+data "aws_security_group" "endpoints_security_group" {
+  name   = "${local.base_prefix}-vpc-endpoints-security-group"
+  vpc_id = data.aws_vpc.spoke_vpc.id
+}
+
+data "aws_security_group" "opensearch_sg" {
+  name   = "${local.base_prefix}-opensearch-sg"
+  vpc_id = data.aws_vpc.spoke_vpc.id
+}
+
+data "aws_iam_role" "sagemaker_role" {
+  name = local.sagemaker_role_name
+}
+
+data "aws_iam_role" "lambda_role" {
+  name = local.lambda_role_name
+}
+
+
+</content>
+
+<content full_path="serverless-opensearch/locals.tf">
+locals {
+  resource_provisioner               = "UAIS"
+  base_prefix                        = "uais-${split("-", var.project_id)[0]}"
+  bedrock_kb_role_name               = "${local.base_prefix}-bedrock-kb-role"
+  kb_name                            = "${local.base_prefix}-kb"
+  data_source_name                   = "${local.base_prefix}-kb-data-source"
+  opensearch_collection_name         = "${local.base_prefix}-kb-os-collection"
+  opensearch_kb_index_name           = "${local.base_prefix}-kb-os-index"
+  opensearch_encryption_policy_name  = "${local.base_prefix}-kb-os-security"
+  opensearch_network_policy_name     = "${local.base_prefix}-kb-os-network"
+  opensearch_data_access_policy_name = "${local.base_prefix}-kb-os-data-access"
+  opensearch_vpc_endpoint_name       = "${local.base_prefix}-kb-os-vpc-endpoint"
+  raw_data_bucket_name               = "${local.base_prefix}-workspace-bucket"
+  kms_key_alias                      = "alias/${local.base_prefix}-kms-key"
+  sagemaker_role_name                = "${local.base_prefix}-sagemaker-domain-exec-role"
+  lambda_role_name                   = "${local.base_prefix}-lambda-exec-role"
+}
+</content>
+
+<content full_path="serverless-opensearch/main.tf">
+# OpenSearch Serverless collection
+resource "aws_opensearchserverless_collection" "kb_vector_store" {
+  name = local.opensearch_collection_name
+  type = "VECTORSEARCH"
+
+  depends_on = [aws_opensearchserverless_security_policy.aoss_encryption_policy]
+}
+
+# OpenSearch Serverless encryption policy
+resource "aws_opensearchserverless_security_policy" "aoss_encryption_policy" {
+  name        = local.opensearch_encryption_policy_name
+  type        = "encryption"
+  description = "encryption security policy using customer KMS key"
+  policy = jsonencode({
+    Rules = [
+      {
+        Resource = [
+          "collection/${local.opensearch_collection_name}"
+        ],
+        ResourceType = "collection"
+      }
+    ],
+    AWSOwnedKey = false
+    KmsARN      = data.aws_kms_key.base_kms_key.arn
+  })
+}
+
+# OpenSearch Serverless network policy
+resource "aws_opensearchserverless_security_policy" "aoss_network_policy" {
+  name        = local.opensearch_network_policy_name
+  type        = "network"
+  description = "Allow Bedrock and VPC access to collection"
+  policy = jsonencode([
+    {
+      Description = "Allow Bedrock and VPC access",
+      Rules = [
+        {
+          ResourceType = "collection",
+          Resource = [
+            "collection/${local.opensearch_collection_name}"
+          ]
+        }
+      ],
+# Making collection public as bedrock KB cannot be vpc bound and it needs this to be public
+#         "bedrock.amazonaws.com"
+#       ],
+#       SourceVPCEs = [
+#         aws_opensearchserverless_vpc_endpoint.aoss_vpc_endpoint.id
+#       ],
+      AllowFromPublic = true
+    }
+  ])
+}
+
+# OpenSearch Serverless data access policy
+resource "aws_opensearchserverless_access_policy" "aoss_data_access_policy" {
+  name        = local.opensearch_data_access_policy_name
+  type        = "data"
+  description = "allow index and collection access"
+  policy = jsonencode([
+    {
+      Rules = [
+        {
+          ResourceType = "index",
+          Resource = [
+            "index/${local.opensearch_collection_name}/*"
+          ],
+          Permission = [
+            "aoss:*"
+          ]
+        },
+        {
+          ResourceType = "collection",
+          Resource = [
+            "collection/${local.opensearch_collection_name}"
+          ],
+          Permission = [
+            "aoss:*"
+          ]
+        }
+      ],
+      Principal = [
+        data.aws_iam_role.sagemaker_role.arn,
+        data.aws_iam_role.bedrock_kb_role.arn,
+        data.aws_iam_role.lambda_role.arn
+      ]
+    }
+  ])
+}
+
+# Creates a aoss VPC endpoint
+# vpc endpoint will be used by services like sagemaker, lambda to access this aoss
+resource "aws_opensearchserverless_vpc_endpoint" "aoss_vpc_endpoint" {
+  name               = local.opensearch_vpc_endpoint_name
+  vpc_id             = data.aws_vpc.spoke_vpc.id
+  subnet_ids         = data.aws_subnets.endpoints_subnets.ids
+  security_group_ids = [data.aws_security_group.opensearch_sg.id]
+}
+
+# Commenting this code as bedrock Knowledge Base creation will be done by user from portal.
+# Uncomment this if it is required in future.
+# resource "aws_bedrockagent_knowledge_base" "kb" {
+#   name     = local.kb_name
+#   role_arn = data.aws_iam_role.bedrock_kb_role.arn
+#
+#   knowledge_base_configuration {
+#     vector_knowledge_base_configuration {
+#       embedding_model_arn = var.embedding_model_arn
+#     }
+#     type = "VECTOR"
+#   }
+#
+#   storage_configuration {
+#     type = "OPENSEARCH_SERVERLESS"
+#     opensearch_serverless_configuration {
+#       collection_arn    = aws_opensearchserverless_collection.kb_vector_store.arn
+#       vector_index_name = local.opensearch_kb_index_name
+#       field_mapping {
+#         vector_field   = "bedrock-knowledge-base-default-vector"
+#         text_field     = "AMAZON_BEDROCK_TEXT_CHUNK"
+#         metadata_field = "AMAZON_BEDROCK_METADATA"
+#       }
+#     }
+#   }
+#   depends_on = [opensearch_index.sample_kb_index]
+# }
+#
+# provider "opensearch" {
+#   url         = aws_opensearchserverless_collection.kb_vector_store.collection_endpoint
+#   healthcheck = false
+# }
+#
+# resource "opensearch_index" "sample_kb_index" {
+#   name                           = local.opensearch_kb_index_name
+#   number_of_shards               = "2"
+#   number_of_replicas             = "0"
+#   index_knn                      = true
+#   index_knn_algo_param_ef_search = "512"
+#   mappings                       = <<-EOF
+#     {
+#       "properties": {
+#         "bedrock-knowledge-base-default-vector": {
+#           "type": "knn_vector",
+#           "dimension": 1024,
+#           "method": {
+#             "name": "hnsw",
+#             "engine": "faiss",
+#             "parameters": {
+#               "m": 16,
+#               "ef_construction": 512
+#             },
+#             "space_type": "l2"
+#           }
+#         },
+#         "AMAZON_BEDROCK_METADATA": {
+#           "type": "text",
+#           "index": "false"
+#         },
+#         "AMAZON_BEDROCK_TEXT_CHUNK": {
+#           "type": "text",
+#           "index": "true"
+#         }
+#       }
+#     }
+#   EOF
+#   force_destroy                  = true
+# }
+#
+# resource "aws_bedrockagent_data_source" "kb_data_source" {
+#   knowledge_base_id = aws_bedrockagent_knowledge_base.kb.id
+#   name              = local.data_source_name
+#
+#   data_source_configuration {
+#     type = "S3"
+#     s3_configuration {
+#       bucket_arn = data.aws_s3_bucket.raw_data_bucket.arn
+#       inclusion_prefixes = [
+#         "default-kb-space/"
+#       ]
+#     }
+#   }
+# }
+
+
+</content>
+
+<content full_path="serverless-opensearch/param_store_values.tf">
+resource "aws_ssm_parameter" "aoss_collection_arn" {
+  name  = "/params/${local.base_prefix}/platform/aoss-collection-arn"
+  type  = "String"
+  value = aws_opensearchserverless_collection.kb_vector_store.arn
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+resource "aws_ssm_parameter" "aoss_endpoint" {
+  name  = "/params/${local.base_prefix}/platform/aoss-endpoint"
+  type  = "String"
+  value = aws_opensearchserverless_collection.kb_vector_store.collection_endpoint
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+</content>
+
+<content full_path="serverless-opensearch/variables.tf">
+variable "aws_region" {
+  description = "AWS Region."
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "tags" {
+  description = "Tags to apply to resources."
+  type        = map(string)
+}
+
+variable "aws_account_id" {
+  description = "AWS Account ID"
+  type        = string
+}
+
+variable "project_id" {
+  description = "UAIS Project ID tied to the workspace"
+  type        = string
+}
+
+# variable "embedding_model_arn" {
+#   description = "ARN of the embedding model to use for the knowledge base"
+#   type        = string
+#   default     = "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0"
+# }
+</content>
+
+<content full_path="serverless-opensearch/provider.tf">
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+# Uncomment the following lines if you want to use OpenSearch provider
+#     opensearch = {
+#       source  = "opensearch-project/opensearch"
+#       version = "= 2.3.2"
+#     }
+  }
+#   backend "s3" {
+#     access_key = ""
+#     secret_key = ""
+#     token      = ""
+#     bucket     = ""
+#     key        = ""
+#     region     = ""
+#   }
+}
+
+provider "aws" {
+
+  #   access_key = var.aws_access_key
+  #   secret_key = var.aws_secret_key
+  region = var.aws_region
+  #
+  #   assume_role {
+  #     role_arn = "arn:aws:iam::${var.aws_account_id}:role/uais_admin_access_role"
+  #   }
+}
+</content>
+
+<content full_path="serverless-opensearch/inputs/sandbox/982534393096_46de60f5-2b31-4fb7-9cbf-b728d5b104e3.tfvars">
+aws_region     = "us-east-1"
+aws_account_id = "982534393096"
+project_id     = "46de60f5-2b31-4fb7-9cbf-b728d5b104e3"
+
+tags = {
+  "project_id"   = "46de60f5-2b31-4fb7-9cbf-b728d5b104e3",
+  "aide-id"      = "AIDE_0074310"
+  "hcp_rg"       = "migration-aide-0074310-4416a57",
+  "environment"  = "dev",
+  "service-tier" = "p2"
 }
 </content>
 
@@ -434,9 +804,9 @@ data "aws_iam_role" "opensearch_master_role" {
   name = "${local.base_prefix}-opensearch-master-role"
 }
 
-#data "aws_iam_role" "lambda_exec_role" {
-#  name = "${local.base_prefix}-lambda-exec-role"
-#}
+data "aws_iam_role" "lambda_exec_role" {
+ name = "${local.base_prefix}-lambda-exec-role"
+}
 
 data "aws_iam_role" "sagemaker_domain_exec_role" {
   name = "${local.base_prefix}-sagemaker-domain-exec-role"
@@ -584,7 +954,7 @@ resource "aws_opensearch_domain" "opensearch" {
         Principal = {
           AWS = [
             data.aws_iam_role.opensearch_master_role.arn,
-            #data.aws_iam_role.lambda_exec_role.arn,
+            data.aws_iam_role.lambda_exec_role.arn,
             data.aws_iam_role.sagemaker_domain_exec_role.arn
           ]
         }
@@ -806,397 +1176,6 @@ endpoint_names = ["ecr.api", "ecr.dkr", "logs", "ssm", "ssmmessages", "ec2messag
   "sagemaker.featurestore-runtime", "servicecatalog", "forecast", "forecastquery", "rekognition", "textract", "comprehend", "sts", "redshift-data",
 "athena", "glue", "codewhisperer"]
 
-</content>
-
-<content full_path="bedrock-kb/data.tf">
-data "aws_caller_identity" "current" {}
-
-data "aws_region" "current" {}
-
-# the workspace bucket is used to store the raw data files
-# customer can bring data in byod bucket and apply transformations and then move transformed dat to workspace bucket
-data "aws_s3_bucket" "raw_data_bucket" {
-  bucket = local.raw_data_bucket_name
-}
-
-data "aws_iam_role" "bedrock_kb_role" {
-  name = local.bedrock_kb_role_name
-}
-
-data "aws_kms_key" "base_kms_key" {
-  key_id = local.kms_key_alias
-}
-
-data "aws_vpc" "spoke_vpc" {
-  filter {
-    name   = "tag:Name"
-    values = ["${local.base_prefix}-vpc"]
-  }
-}
-
-data "aws_subnets" "endpoints_subnets" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.spoke_vpc.id]
-  }
-
-  filter {
-    name   = "tag:Name"
-    values = ["${local.base_prefix}-endpoints*"]
-  }
-}
-
-data "aws_security_group" "endpoints_security_group" {
-  name   = "${local.base_prefix}-vpc-endpoints-security-group"
-  vpc_id = data.aws_vpc.spoke_vpc.id
-}
-
-data "aws_iam_role" "sagemaker_role" {
-  name = local.sagemaker_role_name
-}
-
-
-</content>
-
-<content full_path="bedrock-kb/outputs.tf">
-output "knowledge_base_id" {
-  value = aws_bedrockagent_knowledge_base.kb.id
-}
-</content>
-
-<content full_path="bedrock-kb/locals.tf">
-locals {
-  resource_provisioner               = "UAIS"
-  base_prefix                        = "uais-${split("-", var.project_id)[0]}"
-  bedrock_kb_role_name               = "${local.base_prefix}-bedrock-kb-role"
-  kb_name                            = "${local.base_prefix}-kb"
-  data_source_name                   = "${local.base_prefix}-kb-data-source"
-  opensearch_collection_name         = "${local.base_prefix}-kb-os-collection"
-  opensearch_kb_index_name           = "${local.base_prefix}-kb-os-index"
-  opensearch_encryption_policy_name  = "${local.base_prefix}-kb-os-security"
-  opensearch_network_policy_name     = "${local.base_prefix}-kb-os-network"
-  opensearch_data_access_policy_name = "${local.base_prefix}-kb-os-data-access"
-  opensearch_vpc_endpoint_name       = "${local.base_prefix}-kb-os-vpc-endpoint"
-  raw_data_bucket_name               = "${local.base_prefix}-workspace-bucket"
-  kms_key_alias                      = "alias/${local.base_prefix}-kms-key"
-  sagemaker_role_name                = "${local.base_prefix}-sagemaker-domain-exec-role"
-}
-</content>
-
-<content full_path="bedrock-kb/main.tf">
-# OpenSearch Serverless collection
-resource "aws_opensearchserverless_collection" "kb_vector_store" {
-  name = local.opensearch_collection_name
-  type = "VECTORSEARCH"
-
-  depends_on = [aws_opensearchserverless_security_policy.aoss_encryption_policy]
-}
-
-# OpenSearch Serverless encryption policy
-resource "aws_opensearchserverless_security_policy" "aoss_encryption_policy" {
-  name        = local.opensearch_encryption_policy_name
-  type        = "encryption"
-  description = "encryption security policy using customer KMS key"
-  policy = jsonencode({
-    Rules = [
-      {
-        Resource = [
-          "collection/${local.opensearch_collection_name}"
-        ],
-        ResourceType = "collection"
-      }
-    ],
-    AWSOwnedKey = false
-    KmsARN      = data.aws_kms_key.base_kms_key.arn
-  })
-}
-
-# OpenSearch Serverless network policy
-resource "aws_opensearchserverless_security_policy" "aoss_network_policy" {
-  name        = local.opensearch_network_policy_name
-  type        = "network"
-  description = "Allow Bedrock and VPC access to collection"
-  policy = jsonencode([
-    {
-      Description = "Allow Bedrock and VPC access",
-      Rules = [
-        {
-          ResourceType = "collection",
-          Resource = [
-            "collection/${local.opensearch_collection_name}"
-          ]
-        }
-      ],
-#       SourceServices = [
-#         "bedrock.amazonaws.com"
-#       ],
-#       SourceVPCEs = [
-#         aws_opensearchserverless_vpc_endpoint.aoss_vpc_endpoint.id
-#       ],
-      AllowFromPublic = true
-    }
-  ])
-}
-
-# OpenSearch Serverless data access policy
-resource "aws_opensearchserverless_access_policy" "aoss_data_access_policy" {
-  name        = local.opensearch_data_access_policy_name
-  type        = "data"
-  description = "allow index and collection access"
-  policy = jsonencode([
-    {
-      Rules = [
-        {
-          ResourceType = "index",
-          Resource = [
-            "index/${local.opensearch_collection_name}/*"
-          ],
-          Permission = [
-            "aoss:*"
-          ]
-        },
-        {
-          ResourceType = "collection",
-          Resource = [
-            "collection/${local.opensearch_collection_name}"
-          ],
-          Permission = [
-            "aoss:*"
-          ]
-        }
-      ],
-      Principal = [
-        data.aws_iam_role.sagemaker_role.arn,
-        data.aws_iam_role.bedrock_kb_role.arn,
-        data.aws_caller_identity.current.arn
-      ]
-    }
-  ])
-}
-
-# Creates a aoss VPC endpoint
-resource "aws_opensearchserverless_vpc_endpoint" "aoss_vpc_endpoint" {
-  name               = local.opensearch_vpc_endpoint_name
-  vpc_id             = data.aws_vpc.spoke_vpc.id
-  subnet_ids         = data.aws_subnets.endpoints_subnets.ids
-  security_group_ids = [data.aws_security_group.endpoints_security_group.id]
-}
-
-# Bedrock Knowledge Base
-resource "aws_bedrockagent_knowledge_base" "kb" {
-  name     = local.kb_name
-  role_arn = data.aws_iam_role.bedrock_kb_role.arn
-
-  knowledge_base_configuration {
-    vector_knowledge_base_configuration {
-      embedding_model_arn = var.embedding_model_arn
-    }
-    type = "VECTOR"
-  }
-
-  storage_configuration {
-    type = "OPENSEARCH_SERVERLESS"
-    opensearch_serverless_configuration {
-      collection_arn    = aws_opensearchserverless_collection.kb_vector_store.arn
-      vector_index_name = local.opensearch_kb_index_name
-      field_mapping {
-        vector_field   = "bedrock-knowledge-base-default-vector"
-        text_field     = "AMAZON_BEDROCK_TEXT_CHUNK"
-        metadata_field = "AMAZON_BEDROCK_METADATA"
-      }
-    }
-  }
-  depends_on = [opensearch_index.sample_kb_index]
-}
-
-provider "opensearch" {
-  url         = aws_opensearchserverless_collection.kb_vector_store.collection_endpoint
-  healthcheck = false
-}
-
-resource "opensearch_index" "sample_kb_index" {
-  name                           = local.opensearch_kb_index_name
-  number_of_shards               = "2"
-  number_of_replicas             = "0"
-  index_knn                      = true
-  index_knn_algo_param_ef_search = "512"
-  mappings                       = <<-EOF
-    {
-      "properties": {
-        "bedrock-knowledge-base-default-vector": {
-          "type": "knn_vector",
-          "dimension": 1024,
-          "method": {
-            "name": "hnsw",
-            "engine": "faiss",
-            "parameters": {
-              "m": 16,
-              "ef_construction": 512
-            },
-            "space_type": "l2"
-          }
-        },
-        "AMAZON_BEDROCK_METADATA": {
-          "type": "text",
-          "index": "false"
-        },
-        "AMAZON_BEDROCK_TEXT_CHUNK": {
-          "type": "text",
-          "index": "true"
-        }
-      }
-    }
-  EOF
-  force_destroy                  = true
-}
-
-resource "aws_bedrockagent_data_source" "kb_data_source" {
-  knowledge_base_id = aws_bedrockagent_knowledge_base.kb.id
-  name              = local.data_source_name
-
-  data_source_configuration {
-    type = "S3"
-    s3_configuration {
-      bucket_arn = data.aws_s3_bucket.raw_data_bucket.arn
-      inclusion_prefixes = [
-        "default-kb-space/"
-      ]
-    }
-  }
-}
-
-
-</content>
-
-<content full_path="bedrock-kb/param_store_values.tf">
-resource "aws_ssm_parameter" "default_kb_id" {
-  name  = "/params/${local.base_prefix}/platform/default-kb-id"
-  type  = "String"
-  value = aws_bedrockagent_knowledge_base.kb.id
-
-  tags = merge(
-    var.tags,
-    {
-      provisoner = local.resource_provisioner
-    }
-  )
-}
-
-resource "aws_ssm_parameter" "default_data_source_id" {
-  name  = "/params/${local.base_prefix}/platform/default-kb-datasource-id"
-  type  = "String"
-  value = aws_bedrockagent_data_source.kb_data_source.id
-
-  tags = merge(
-    var.tags,
-    {
-      provisoner = local.resource_provisioner
-    }
-  )
-}
-
-resource "aws_ssm_parameter" "default_aoss_collection_arn" {
-  name  = "/params/${local.base_prefix}/platform/default-aoss-collection-arn"
-  type  = "String"
-  value = aws_opensearchserverless_collection.kb_vector_store.arn
-
-  tags = merge(
-    var.tags,
-    {
-      provisoner = local.resource_provisioner
-    }
-  )
-}
-
-resource "aws_ssm_parameter" "default_aoss_endpoint" {
-  name  = "/params/${local.base_prefix}/platform/default-aoss-endpoint"
-  type  = "String"
-  value = aws_opensearchserverless_collection.kb_vector_store.collection_endpoint
-
-  tags = merge(
-    var.tags,
-    {
-      provisoner = local.resource_provisioner
-    }
-  )
-}
-</content>
-
-<content full_path="bedrock-kb/variables.tf">
-variable "aws_region" {
-  description = "AWS Region."
-  type        = string
-  default     = "us-east-1"
-}
-
-variable "tags" {
-  description = "Tags to apply to resources."
-  type        = map(string)
-}
-
-variable "aws_account_id" {
-  description = "AWS Account ID"
-  type        = string
-}
-
-variable "project_id" {
-  description = "UAIS Project ID tied to the workspace"
-  type        = string
-}
-
-variable "embedding_model_arn" {
-  description = "ARN of the embedding model to use for the knowledge base"
-  type        = string
-  default     = "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0"
-}
-</content>
-
-<content full_path="bedrock-kb/provider.tf">
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-    opensearch = {
-      source  = "opensearch-project/opensearch"
-      version = "= 2.3.2"
-    }
-  }
-#   backend "s3" {
-#     access_key = ""
-#     secret_key = ""
-#     token      = ""
-#     bucket     = ""
-#     key        = ""
-#     region     = ""
-#   }
-}
-
-provider "aws" {
-
-  #   access_key = var.aws_access_key
-  #   secret_key = var.aws_secret_key
-  region = var.aws_region
-  #
-  #   assume_role {
-  #     role_arn = "arn:aws:iam::${var.aws_account_id}:role/uais_admin_access_role"
-  #   }
-}
-</content>
-
-<content full_path="bedrock-kb/inputs/sandbox/982534393096_46de60f5-2b31-4fb7-9cbf-b728d5b104e3.tfvars">
-aws_region     = "us-east-1"
-aws_account_id = "982534393096"
-project_id     = "46de60f5-2b31-4fb7-9cbf-b728d5b104e3"
-
-tags = {
-  "project_id"   = "46de60f5-2b31-4fb7-9cbf-b728d5b104e3",
-  "aide-id"      = "AIDE_0074310"
-  "hcp_rg"       = "migration-aide-0074310-4416a57",
-  "environment"  = "dev",
-  "service-tier" = "p2"
-}
 </content>
 
 <content full_path="base/role_sagemaker.tf">
@@ -1439,7 +1418,7 @@ locals {
 
   lambda_policy_monitoring = templatefile("${local.policy_lambda_template_path}/monitoring.json.tpl", {})
 
-  role_lambda_exec_role = "${local.base_prefix}-lambda-domain-exec-role"
+  role_lambda_exec_role = "${local.base_prefix}-lambda-exec-role"
 
   # Lambda Resource Arn
   lambda_resource_arn = format("${local.policy_arn_prefix}:function:${local.base_prefix}-*", "lambda") # e.g. arn:aws:lambda:your-region:your-account-id:function:uais-c6945420*
@@ -1460,7 +1439,7 @@ locals {
   bedrock_kb_policy = templatefile("${path.module}/policies/bedrock_kb/bedrock_kb_custom.tpl", {
     workspace_bucket_arn = module.s3_bucket.workspace_bucket_arn
     aoss_arn             = "arn:aws:aoss:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:collection/*"
-    embedding_model_arn  = "arn:aws:bedrock:us-east-1::foundation-model/*"
+    embedding_model_arn  = "arn:aws:bedrock:${data.aws_region.current.name}::foundation-model/*"
     base_kms_arn         = aws_kms_key.base_kms_key.arn
   })
 

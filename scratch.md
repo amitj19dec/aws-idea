@@ -1,5 +1,36 @@
 ```
 {
+"Version":"2012-10-17",
+"Statement":[
+{
+"Effect":"Allow",
+"Action":"lex:*",
+"Resource":"*",
+"Condition":{"StringLike":{"lex:bot-name":"uais-86ef73a8-*"}}
+},
+{
+"Effect":"Allow",
+"Action":["lambda:GetFunction","lambda:ListFunctions","logs:*LogGroup*","logs:GetLogEvents","s3:GetObject","s3:ListBucket"],
+"Resource":["arn:aws:lambda:*:*:function:uais-86ef73a8-*","arn:aws:logs:*:*:log-group:/aws/lex/uais-86ef73a8-*","arn:aws:s3:::uais-86ef73a8-conversation-logs*"]
+},
+{
+"Effect":"Deny",
+"Action":["iam:*","sts:AssumeRole"],
+"Resource":"*"
+},
+{
+"Effect":"Deny",
+"Action":"lex:UpdateBot",
+"Resource":"*",
+"Condition":{"StringNotEquals":{"lex:service-role":"arn:aws:iam::982534393096:role/uais-86ef73a8-lex-service-role"}}
+}
+]
+}
+```
+
+
+```
+{
   "Version": "2012-10-17",
   "Statement": [
     {

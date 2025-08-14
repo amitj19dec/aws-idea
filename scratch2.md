@@ -1,3 +1,53 @@
+## Policy ##
+```{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowBedrockFullAccess",
+      "Effect": "Allow",
+      "Action": "bedrock:*",
+      "Resource": [
+				"arn:aws:bedrock:*:982534393096:data-automation-profile/uais-abcde-*",
+				"arn:aws:bedrock:*:982534393096:async-invoke/uais-abcde-*",
+				"arn:aws:bedrock:*:982534393096:flow/uais-abcde-*",
+				"arn:aws:bedrock:*:982534393096:agent/uais-abcde-*",
+				"arn:aws:bedrock:*:982534393096:evaluation-job/uais-abcde-*",
+				"arn:aws:bedrock:*:982534393096:knowledge-base/uais-abcde-*",
+				"arn:aws:bedrock:*:982534393096:blueprint/uais-abcde-*",
+				"arn:aws:bedrock:*:982534393096:automated-reasoning-policy/uais-abcde-*:*",
+				"arn:aws:bedrock:*:982534393096:guardrail-profile/uais-abcde-*",
+				"arn:aws:bedrock:*:982534393096:application-inference-profile/uais-abcde-*",
+				"arn:aws:bedrock:*:982534393096:inference-profile/uais-abcde-*",
+				"arn:aws:bedrock:*:982534393096:data-automation-project/uais-abcde-*",
+				"arn:aws:bedrock:*:982534393096:marketplace/model-endpoint/all-access",
+				"arn:aws:bedrock:*:982534393096:provisioned-model/uais-abcde-*",
+				"arn:aws:bedrock:*:982534393096:session/uais-abcde-*",
+				"arn:aws:bedrock:*:982534393096:default-prompt-router/uais-abcde-*",
+				"arn:aws:bedrock:*:982534393096:guardrail/uais-abcde-*",
+				"arn:aws:bedrock:*:982534393096:model-invocation-job/uais-abcde-*",
+				"arn:aws:bedrock:*::foundation-model/*",
+				"arn:aws:bedrock:*:982534393096:agent-alias/uais-abcde-*/*",
+				"arn:aws:bedrock:*:982534393096:data-automation-invocation/uais-abcde-*",
+				"arn:aws:bedrock:*:982534393096:prompt-router/uais-abcde-*",
+				"arn:aws:bedrock:*:982534393096:prompt/uais-abcde-*:*"
+			]
+    },
+    {
+      "Sid": "DenyCustomModelListActions",
+      "Effect": "Deny",
+      "Action": [
+        "bedrock:ListCustomModelDeployments",
+        "bedrock:ListCustomModels",
+        "bedrock:ListAsyncInvokes"
+        "
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+
 ## Bedrock: ##
 
 These are the resource ARN related to Bedrock

@@ -1,5 +1,6 @@
 ## Policy ##
-```{
+```
+{
   "Version": "2012-10-17",
   "Statement": [
     {
@@ -7,39 +8,58 @@
       "Effect": "Allow",
       "Action": "bedrock:*",
       "Resource": [
-				"arn:aws:bedrock:*:982534393096:data-automation-profile/uais-abcde-*",
-				"arn:aws:bedrock:*:982534393096:async-invoke/uais-abcde-*",
-				"arn:aws:bedrock:*:982534393096:flow/uais-abcde-*",
-				"arn:aws:bedrock:*:982534393096:agent/uais-abcde-*",
-				"arn:aws:bedrock:*:982534393096:evaluation-job/uais-abcde-*",
-				"arn:aws:bedrock:*:982534393096:knowledge-base/uais-abcde-*",
-				"arn:aws:bedrock:*:982534393096:blueprint/uais-abcde-*",
-				"arn:aws:bedrock:*:982534393096:automated-reasoning-policy/uais-abcde-*:*",
-				"arn:aws:bedrock:*:982534393096:guardrail-profile/uais-abcde-*",
-				"arn:aws:bedrock:*:982534393096:application-inference-profile/uais-abcde-*",
-				"arn:aws:bedrock:*:982534393096:inference-profile/uais-abcde-*",
-				"arn:aws:bedrock:*:982534393096:data-automation-project/uais-abcde-*",
-				"arn:aws:bedrock:*:982534393096:marketplace/model-endpoint/all-access",
-				"arn:aws:bedrock:*:982534393096:provisioned-model/uais-abcde-*",
-				"arn:aws:bedrock:*:982534393096:session/uais-abcde-*",
-				"arn:aws:bedrock:*:982534393096:default-prompt-router/uais-abcde-*",
-				"arn:aws:bedrock:*:982534393096:guardrail/uais-abcde-*",
-				"arn:aws:bedrock:*:982534393096:model-invocation-job/uais-abcde-*",
-				"arn:aws:bedrock:*::foundation-model/*",
-				"arn:aws:bedrock:*:982534393096:agent-alias/uais-abcde-*/*",
-				"arn:aws:bedrock:*:982534393096:data-automation-invocation/uais-abcde-*",
-				"arn:aws:bedrock:*:982534393096:prompt-router/uais-abcde-*",
-				"arn:aws:bedrock:*:982534393096:prompt/uais-abcde-*:*"
-			]
+        "arn:aws:bedrock:us-east-1:982534393096:data-automation-profile/uais-86ef73a8-*",
+        "arn:aws:bedrock:us-east-1:982534393096:async-invoke/uais-86ef73a8-*",
+        "arn:aws:bedrock:us-east-1:982534393096:flow/uais-86ef73a8-*",
+        "arn:aws:bedrock:us-east-1:982534393096:agent/uais-86ef73a8-*",
+        "arn:aws:bedrock:us-east-1:982534393096:evaluation-job/uais-86ef73a8-*",
+        "arn:aws:bedrock:us-east-1:982534393096:knowledge-base/uais-86ef73a8-*",
+        "arn:aws:bedrock:us-east-1:982534393096:blueprint/uais-86ef73a8-*",
+        "arn:aws:bedrock:us-east-1:982534393096:automated-reasoning-policy/uais-86ef73a8-*:*",
+        "arn:aws:bedrock:us-east-1:982534393096:guardrail-profile/uais-86ef73a8-*",
+        "arn:aws:bedrock:us-east-1:982534393096:application-inference-profile/uais-86ef73a8-*",
+        "arn:aws:bedrock:us-east-1:982534393096:inference-profile/uais-86ef73a8-*",
+        "arn:aws:bedrock:us-east-1:982534393096:data-automation-project/uais-86ef73a8-*",
+        "arn:aws:bedrock:us-east-1:982534393096:marketplace/model-endpoint/all-access",
+        "arn:aws:bedrock:us-east-1:982534393096:provisioned-model/uais-86ef73a8-*",
+        "arn:aws:bedrock:us-east-1:982534393096:session/uais-86ef73a8-*",
+        "arn:aws:bedrock:us-east-1:982534393096:default-prompt-router/uais-86ef73a8-*",
+        "arn:aws:bedrock:us-east-1:982534393096:guardrail/uais-86ef73a8-*",
+        "arn:aws:bedrock:us-east-1:982534393096:model-invocation-job/uais-86ef73a8-*",
+        "arn:aws:bedrock:us-east-1::foundation-model/*",
+        "arn:aws:bedrock:us-east-1:982534393096:agent-alias/uais-86ef73a8-*/*",
+        "arn:aws:bedrock:us-east-1:982534393096:data-automation-invocation/uais-86ef73a8-*",
+        "arn:aws:bedrock:us-east-1:982534393096:prompt-router/uais-86ef73a8-*",
+        "arn:aws:bedrock:us-east-1:982534393096:prompt/uais-86ef73a8-*:*"
+      ]
     },
     {
-      "Sid": "DenyCustomModelListActions",
+      "Sid": "DenyCustomModelAndMarketplaceActions",
       "Effect": "Deny",
       "Action": [
-        "bedrock:ListCustomModelDeployments",
         "bedrock:ListCustomModels",
-        "bedrock:ListAsyncInvokes"
-        "
+        "bedrock:ListCustomModelDeployments",
+        "bedrock:ListModelCopyJobs",
+        "bedrock:ListModelImportJobs",
+        "bedrock:GetMarketplaceModelEndpoint",
+        "bedrock:ListMarketplaceModelEndpoints",
+        "bedrock:GetModelImportJob",
+        "bedrock:GetModelCopyJob",
+        "bedrock:GetCustomModelDeployment",
+        "bedrock:GetModelCustomizationJob",
+        "bedrock:CreateMarketplaceModelEndpoint",
+        "bedrock:DeleteCustomModelDeployment",
+        "bedrock:DeleteMarketplaceModelAgreement",
+        "bedrock:CreateCustomModel",
+        "bedrock:CreateModelCopyJob",
+        "bedrock:CreateModelImportJob",
+        "bedrock:DeleteMarketplaceModelEndpoint",
+        "bedrock:CreateCustomModelDeployment",
+        "bedrock:CreateModelCustomizationJob",
+        "bedrock:DeleteCustomModel",
+        "bedrock:DeregisterMarketplaceModelEndpoint",
+        "bedrock:RegisterMarketplaceModelEndpoint",
+        "bedrock:UpdateMarketplaceModelEndpoint"
       ],
       "Resource": "*"
     }

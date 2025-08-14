@@ -1,194 +1,42 @@
-## Lex User Policy
-```
-{
-	"Version": "2012-10-17",
-	"Statement": [
-		{
-			"Sid": "VisualEditor0",
-			"Effect": "Allow",
-			"Action": [
-				"lex:DeleteImport",
-				"lex:ListSlotTypes",
-				"lex:CreateExport",
-				"lex:StartTestSetGeneration",
-				"lex:DescribeIntent",
-				"lex:UpdateBotAlias",
-				"lex:DescribeCustomVocabularyMetadata",
-				"lex:ListBotVersionReplicas",
-				"lex:CreateBotReplica",
-				"lex:UpdateBotLocale",
-				"lex:DescribeTestExecution",
-				"lex:DeleteIntent",
-				"lex:ListBotLocales",
-				"lex:UpdateSlotType",
-				"lex:ListIntentPaths",
-				"lex:RecognizeUtterance",
-				"lex:ListBotChannels",
-				"lex:ListCustomVocabularyItems",
-				"lex:CreateBot",
-				"lex:DeleteBotAlias",
-				"lex:DescribeBotLocale",
-				"lex:DeleteBot",
-				"lex:ListIntentStageMetrics",
-				"lex:ListBotReplicas",
-				"lex:GenerateBotElement",
-				"lex:DeleteSlotType",
-				"lex:UpdateBotRecommendation",
-				"lex:DeleteSession",
-				"lex:DeleteResourcePolicyStatement",
-				"lex:StartBotResourceGeneration",
-				"lex:DescribeImport",
-				"lex:DescribeSlot",
-				"lex:ListIntentMetrics",
-				"lex:DescribeBotReplica",
-				"lex:UpdateSlot",
-				"lex:ListAggregatedUtterances",
-				"lex:DeleteExport",
-				"lex:DescribeTestSet",
-				"lex:DescribeSlotType",
-				"lex:DeleteCustomVocabulary",
-				"lex:DeleteBotVersion",
-				"lex:CreateResourcePolicy",
-				"lex:BatchCreateCustomVocabularyItem",
-				"lex:ListBotAliases",
-				"lex:DescribeBotAlias",
-				"lex:DescribeTestSetDiscrepancyReport",
-				"lex:DescribeCustomVocabulary",
-				"lex:ListSessionAnalyticsData",
-				"lex:BuildBotLocale",
-				"lex:ListBotVersions",
-				"lex:CreateBotAlias",
-				"lex:CreateSlotType",
-				"lex:ListTagsForResource",
-				"lex:DeleteBotLocale",
-				"lex:CreateBotChannel",
-				"lex:DescribeBotVersion",
-				"lex:UpdateIntent",
-				"lex:CreateResourcePolicyStatement",
-				"lex:DeleteResourcePolicy",
-				"lex:ListSlots",
-				"lex:ListBotRecommendations",
-				"lex:DescribeBot",
-				"lex:CreateCustomVocabulary",
-				"lex:CreateBotLocale",
-				"lex:DescribeBotRecommendation",
-				"lex:DescribeBotResourceGeneration",
-				"lex:ListBotResourceGenerations",
-				"lex:ListIntents",
-				"lex:SearchAssociatedTranscripts",
-				"lex:BatchUpdateCustomVocabularyItem",
-				"lex:UpdateCustomVocabulary",
-				"lex:UpdateExport",
-				"lex:CreateSlot",
-				"lex:DeleteUtterances",
-				"lex:CreateBotVersion",
-				"lex:StartTestExecution",
-				"lex:DescribeBotChannel",
-				"lex:PutSession",
-				"lex:DescribeResourcePolicy",
-				"lex:GetTestExecutionArtifactsUrl",
-				"lex:StopBotRecommendation",
-				"lex:DescribeTestSetGeneration",
-				"lex:DeleteBotReplica",
-				"lex:ListTestExecutionResultItems",
-				"lex:UpdateTestSet",
-				"lex:StartImport",
-				"lex:StartBotRecommendation",
-				"lex:CreateIntent",
-				"lex:RecognizeText",
-				"lex:DescribeExport",
-				"lex:ListRecommendedIntents",
-				"lex:StartConversation",
-				"lex:ListTestSetRecords",
-				"lex:ListSessionMetrics",
-				"lex:CreateTestSetDiscrepancyReport",
-				"lex:UpdateResourcePolicy",
-				"lex:DeleteBotChannel",
-				"lex:GetSession",
-				"lex:DeleteSlot",
-				"lex:UpdateBot",
-				"lex:ListBotAliasReplicas",
-				"lex:DeleteTestSet",
-				"lex:BatchDeleteCustomVocabularyItem"
-			],
-			"Resource": [
-				"arn:aws:lex:us-east-1:982534393096:bot/uais-86ef73a8-*",
-				"arn:aws:lex:us-east-1:982534393096:bot-alias/uais-86ef73a8-*/*",
-				"arn:aws:lex:us-east-1:982534393096:test-set/uais-86ef73a8-*"
-			]
-		},
-		{
-			"Sid": "VisualEditor1",
-			"Effect": "Allow",
-			"Action": [
-				"lex:CreateUploadUrl",
-				"lex:ListBuiltInSlotTypes",
-				"lex:ListBots",
-				"lex:CreateTestSet",
-				"lex:ListTestSets",
-				"lex:ListBuiltInIntents",
-				"lex:ListImports",
-				"lex:ListTestExecutions",
-				"lex:ListExports"
-			],
-			"Resource": "*"
-		}
-	]
-}
-```
-
-
+## Lex User Policy (updated)
 ```
 {
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "LexProjectAccess",
       "Effect": "Allow",
       "Action": "lex:*",
-      "Resource": "*",
-      "Condition": {
-        "StringLike": {
-          "lex:bot-name": "project-${uuid}-*"
-        }
-      }
-    },
-    {
-      "Sid": "SupportingServices",
-      "Effect": "Allow",
-      "Action": [
-        "lambda:GetFunction",
-        "lambda:ListFunctions",
-        "logs:*LogGroup*",
-        "logs:GetLogEvents",
-        "s3:GetObject",
-        "s3:ListBucket"
-      ],
       "Resource": [
-        "arn:aws:lambda:*:*:function:project-${uuid}-*",
-        "arn:aws:logs:*:*:log-group:/aws/lex/project-${uuid}-*",
-        "arn:aws:s3:::project-${uuid}-conversation-logs*"
+        "arn:aws:lex:us-east-1:982534393096:bot/uais-86ef73a8-*",
+        "arn:aws:lex:us-east-1:982534393096:bot-alias/uais-86ef73a8-*/*",
+        "arn:aws:lex:us-east-1:982534393096:test-set/uais-86ef73a8-*"
       ]
     },
     {
-      "Sid": "SecurityBoundaries",
       "Effect": "Deny",
       "Action": [
-        "iam:*",
-        "sts:AssumeRole"
+        "lex:CreateBotChannel",
+        "lex:UpdateBotChannel",
+        "lex:DeleteBotChannel",
+        "lex:DescribeBotChannel",
+        "lex:ListBotChannels"
       ],
       "Resource": "*"
     },
     {
-      "Sid": "EnforceServiceRole",
-      "Effect": "Deny",
-      "Action": "lex:UpdateBot",
-      "Resource": "*",
-      "Condition": {
-        "StringNotEquals": {
-          "lex:service-role": "arn:aws:iam::${aws:accountId}:role/project-${uuid}-lex-service-role"
-        }
-      }
+      "Effect": "Allow",
+      "Action": [
+        "lex:CreateUploadUrl",
+        "lex:ListBuiltInSlotTypes",
+        "lex:ListBots",
+        "lex:CreateTestSet",
+        "lex:ListTestSets",
+        "lex:ListBuiltInIntents",
+        "lex:ListImports",
+        "lex:ListTestExecutions",
+        "lex:ListExports"
+      ],
+      "Resource": "*"
     }
   ]
 }

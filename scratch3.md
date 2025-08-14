@@ -10,7 +10,7 @@
             ],
             "Effect": "Allow",
             "Resource": [
-                "arn:aws:bedrock:us-east-1:982534393096::foundation-model/*"
+                "arn:aws:bedrock:us-east-1::foundation-model/*"
             ],
             "Sid": "InvokeFoundationModels"
         },
@@ -21,20 +21,9 @@
             ],
             "Effect": "Allow",
             "Resource": [
-                "arn:aws:bedrock:us-east-1:982534393096:provisioned-model/*"
+                "arn:aws:bedrock:us-east-1:982534393096:provisioned-model/uais-86ef73a8-*"
             ],
             "Sid": "InvokeProvisionedModels"
-        },
-        {
-            "Action": [
-                "bedrock:InvokeModel",
-                "bedrock:GetCustomModel"
-            ],
-            "Effect": "Allow",
-            "Resource": [
-                "arn:aws:bedrock:us-east-1:982534393096:custom-model/*"
-            ],
-            "Sid": "InvokeCustomModels"
         },
         {
             "Action": [
@@ -42,7 +31,7 @@
             ],
             "Effect": "Allow",
             "Resource": [
-                "arn:aws:bedrock:us-east-1:982534393096:prompt/*"
+                "arn:aws:bedrock:us-east-1:982534393096:prompt/uais-86ef73a8-*:*"
             ],
             "Sid": "AccessPromptManagement"
         },
@@ -53,7 +42,7 @@
             ],
             "Effect": "Allow",
             "Resource": [
-                "arn:aws:bedrock:us-east-1:982534393096:knowledge-base/*"
+                "arn:aws:bedrock:us-east-1:982534393096:knowledge-base/uais-86ef73a8-*"
             ],
             "Sid": "QueryKnowledgeBases"
         },
@@ -63,8 +52,8 @@
             ],
             "Effect": "Allow",
             "Resource": [
-                "arn:aws:bedrock:us-east-1:982534393096:agent/*",
-                "arn:aws:bedrock:us-east-1:982534393096:agent-alias/*"
+                "arn:aws:bedrock:us-east-1:982534393096:agent/uais-86ef73a8-*",
+                "arn:aws:bedrock:us-east-1:982534393096:agent-alias/uais-86ef73a8-*/*"
             ],
             "Sid": "InvokeAgents"
         },

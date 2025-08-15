@@ -1,305 +1,319 @@
-## Bedrock Flows Policy Template ##
 ```
 {
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "InvokeFoundationModels",
-      "Effect": "Allow",
-      "Action": [
-        "bedrock:InvokeModel",
-        "bedrock:InvokeModelWithResponseStream"
-      ],
-      "Resource": [
-        "${bedrock_foundation_model_arn}"
-      ]
-    },
-    {
-      "Sid": "InvokeProvisionedModels",
-      "Effect": "Allow",
-      "Action": [
-        "bedrock:InvokeModel",
-        "bedrock:GetProvisionedModelThroughput"
-      ],
-      "Resource": [
-        "${bedrock_provisioned_model_arn}"
-      ]
-    },
-    {
-      "Sid": "InvokeCustomModels",
-      "Effect": "Allow",
-      "Action": [
-        "bedrock:InvokeModel",
-        "bedrock:GetCustomModel"
-      ],
-      "Resource": [
-        "${bedrock_custom_model_arn}"
-      ]
-    },
-    {
-      "Sid": "AccessPromptManagement",
-      "Effect": "Allow",
-      "Action": [
-        "bedrock:GetPrompt"
-      ],
-      "Resource": [
-        "${bedrock_prompt_arn}"
-      ]
-    },
-    {
-      "Sid": "QueryKnowledgeBases",
-      "Effect": "Allow",
-      "Action": [
-        "bedrock:Retrieve",
-        "bedrock:RetrieveAndGenerate"
-      ],
-      "Resource": [
-        "${bedrock_kb_arn}"
-      ]
-    },
-    {
-      "Sid": "InvokeAgents",
-      "Effect": "Allow",
-      "Action": [
-        "bedrock:InvokeAgent"
-      ],
-      "Resource": [
-        "${bedrock_agent_arn}",
-        "${bedrock_agent_alias_arn}"
-      ]
-    },
-    {
-      "Sid": "InvokeLambdaFunctions",
-      "Effect": "Allow",
-      "Action": [
-        "lambda:InvokeFunction"
-      ],
-      "Resource": [
-        "${lambda_function_arn}"
-      ]
-    },
-    {
-      "Sid": "AccessLexBots",
-      "Effect": "Allow",
-      "Action": [
-        "lex:RecognizeText",
-        "lex:RecognizeUtterance",
-        "lex:PostContent",
-        "lex:PostText"
-      ],
-      "Resource": [
-        "${lex_bot_arn}"
-      ]
-    },
-    {
-      "Sid": "ApplyGuardrails",
-      "Effect": "Allow",
-      "Action": [
-        "bedrock:ApplyGuardrail"
-      ],
-      "Resource": [
-        "${bedrock_guardrail_arn}"
-      ]
-    },
-    {
-      "Sid": "AccessS3ForFlows",
-      "Effect": "Allow",
-      "Action": [
-        "s3:GetObject",
-        "s3:PutObject",
-        "s3:ListBucket"
-      ],
-      "Resource": [
-        "${workspace_bucket_arn}",
-        "${workspace_bucket_arn}/*"
-      ]
-    },
-    {
-      "Sid": "KMSAccess",
-      "Effect": "Allow",
-      "Action": [
-        "kms:Decrypt",
-        "kms:GenerateDataKey",
-        "kms:CreateGrant"
-      ],
-      "Resource": "${base_kms_arn}",
-      "Condition": {
-        "StringEquals": {
-          "kms:ViaService": [
-            "s3.${aws_region}.amazonaws.com",
-            "bedrock.${aws_region}.amazonaws.com"
-          ]
+  "TrustPolicy": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Sid": "BatchInferenceJobManagement",
+        "Effect": "Allow",
+        "Action": [
+          "bedrock:CreateModelInvocationJob",
+          "bedrock:GetModelInvocationJob",
+          "bedrock:ListModelInvocationJobs",
+          "bedrock:StopModelInvocationJob"
+        ],
+        "Resource": [
+          "arn:aws:bedrock:us-east-1:982534393096:model-invocation-job/uais-86ef73a8-*",
+          "arn:aws:bedrock:us-east-1::foundation-model/*",
+          "arn:aws:bedrock:us-east-1:982534393096:provisioned-model/uais-86ef73a8-*"
+        ]
+      },
+      {
+        "Sid": "SecretsManagerForThirdPartyKB",
+        "Sid": "BatchInferenceInferenceProfiles",
+        "Effect": "Allow",
+        "Action": [
+          "bedrock:InvokeModel"
+        ],
+        "Resource": [
+          "arn:aws:bedrock:us-east-1:982534393096:inference-profile/uais-86ef73a8-*",
+          "arn:aws:bedrock:*::foundation-model/*"
+        ]
+      },
+      {
+        "Sid": "AccessS3ForBatchInference",
+        "Effect": "Allow",
+        "Action": [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:ListBucket"
+        ],
+        "Resource": [
+          "arn:aws:s3:::uais-86ef73a8-batch-input-bucket",
+          "arn:aws:s3:::uais-86ef73a8-batch-input-bucket/*",
+          "arn:aws:s3:::uais-86ef73a8-batch-output-bucket",
+          "arn:aws:s3:::uais-86ef73a8-batch-output-bucket/*"
+        ],
+        "Condition": {
+          "StringEquals": {
+            "aws:ResourceAccount": "982534393096"
+          }
+        }
+      },
+      {
+        "Sid": "VPCPermissionsForBatchInference",
+        "Effect": "Allow",
+        "Action": [
+          "ec2:DescribeNetworkInterfaces",
+          "ec2:DescribeVpcs",
+          "ec2:DescribeDhcpOptions",
+          "ec2:DescribeSubnets",
+          "ec2:DescribeSecurityGroups"
+        ],
+        "Resource": "*"
+      },
+      {
+        "Sid": "VPCNetworkInterfaceManagement",
+        "Effect": "Allow",
+        "Action": [
+          "ec2:CreateNetworkInterface"
+        ],
+        "Resource": [
+          "arn:aws:ec2:us-east-1:982534393096:network-interface/*",
+          "arn:aws:ec2:us-east-1:982534393096:subnet/uais-86ef73a8-*",
+          "arn:aws:ec2:us-east-1:982534393096:security-group/uais-86ef73a8-*"
+        ],
+        "Condition": {
+          "StringEquals": {
+            "aws:RequestTag/BedrockManaged": "true"
+          },
+          "ArnEquals": {
+            "aws:RequestTag/BedrockModelInvocationJobArn": "arn:aws:bedrock:us-east-1:982534393096:model-invocation-job/uais-86ef73a8-*"
+          }
+        }
+      },
+      {
+        "Sid": "VPCNetworkInterfaceCleanup",
+        "Effect": "Allow",
+        "Action": [
+          "ec2:CreateNetworkInterfacePermission",
+          "ec2:DeleteNetworkInterface",
+          "ec2:DeleteNetworkInterfacePermission"
+        ],
+        "Resource": "*",
+        "Condition": {
+          "StringEquals": {
+            "ec2:Subnet": [
+              "arn:aws:ec2:us-east-1:982534393096:subnet/uais-86ef73a8-*"
+            ]
+          }
+        }
+      },
+        "Effect": "Allow",
+        "Principal": {
+          "Service": "bedrock.amazonaws.com"
+        },
+        "Action": "sts:AssumeRole",
+        "Condition": {
+          "StringEquals": {
+            "aws:SourceAccount": "982534393096"
+          },
+          "ArnLike": {
+            "AWS:SourceArn": [
+              "arn:aws:bedrock:us-east-1:982534393096:agent/*",
+              "arn:aws:bedrock:us-east-1:982534393096:agent-alias/*",
+              "arn:aws:bedrock:us-east-1:982534393096:flow/*"
+            ]
+          }
         }
       }
-    },
-    {
-      "Sid": "CloudWatchLogs",
-      "Effect": "Allow",
-      "Action": [
-        "logs:CreateLogGroup",
-        "logs:CreateLogStream",
-        "logs:PutLogEvents"
-      ],
-      "Resource": [
-        "${cloudwatch_logs_arn}"
-      ]
-    }
-  ]
-}
-```
-## locals ##
-```
-# Add these lines to your existing locals block in base/locals.tf
-
-  # Bedrock Flows Role and Policy locals
-  bedrock_flows_role_name   = "${local.base_prefix}-bedrock-flows-service-role"
-  bedrock_flows_policy_name = "${local.base_prefix}-bedrock-flows-service-policy"
-  
-  # Bedrock ARN patterns for Flows
-  bedrock_foundation_model_arn = format("${local.policy_arn_prefix}::foundation-model/*", "bedrock")
-  bedrock_provisioned_model_arn = format("${local.policy_arn_prefix}:provisioned-model/*", "bedrock")
-  bedrock_custom_model_arn = format("${local.policy_arn_prefix}:custom-model/*", "bedrock")
-  bedrock_prompt_arn = format("${local.policy_arn_prefix}:prompt/*", "bedrock")
-  # Reuse existing bedrock ARNs: bedrock_kb_arn, bedrock_agent_arn, bedrock_agent_alias_arn, bedrock_guardrail_arn
-  
-  # Lex ARN patterns for Flows
-  lex_bot_arn = format("${local.policy_arn_prefix}:bot-alias/${local.base_prefix}-*", "lex")
-  
-  # CloudWatch Logs for Flows
-  bedrock_flows_logs_arn = format("${local.policy_arn_prefix}:log-group:/aws/bedrock/flows/${local.base_prefix}-*", "logs")
-
-  # Bedrock Flows Policy
-  bedrock_flows_policy = templatefile("${path.module}/policies/bedrock_flows/bedrock_flows.tpl", {
-    bedrock_foundation_model_arn = local.bedrock_foundation_model_arn
-    bedrock_provisioned_model_arn = local.bedrock_provisioned_model_arn
-    bedrock_custom_model_arn = local.bedrock_custom_model_arn
-    bedrock_prompt_arn = local.bedrock_prompt_arn
-    bedrock_kb_arn = local.bedrock_kb_arn
-    bedrock_agent_arn = local.bedrock_agent_arn
-    bedrock_agent_alias_arn = local.bedrock_agent_alias_arn
-    bedrock_guardrail_arn = local.bedrock_guardrail_arn
-    lambda_function_arn = local.lambda_resource_arn
-    lex_bot_arn = local.lex_bot_arn
-    workspace_bucket_arn = module.s3_bucket.workspace_bucket_arn
-    base_kms_arn = aws_kms_key.base_kms_key.arn
-    aws_region = var.aws_region
-    cloudwatch_logs_arn = local.bedrock_flows_logs_arn
-  })
-
-```
-## role ##
-```
-# IAM Role for Bedrock Flows
-resource "aws_iam_role" "bedrock_flows_service_role" {
-  name               = local.bedrock_flows_role_name
-  assume_role_policy = data.aws_iam_policy_document.bedrock_flows_assume_role_policy.json
-
-  tags = merge(
-    var.tags,
-    {
-      provisoner = local.resource_provisioner
-      service    = "bedrock-flows"
-    }
-  )
-}
-
-# Trust policy for Bedrock Flows service role
-data "aws_iam_policy_document" "bedrock_flows_assume_role_policy" {
-  statement {
-    actions = ["sts:AssumeRole"]
-
-    principals {
-      type        = "Service"
-      identifiers = ["bedrock.amazonaws.com"]
-    }
-
-    condition {
-      test     = "StringEquals"
-      variable = "aws:SourceAccount"
-      values   = [data.aws_caller_identity.current.account_id]
-    }
-
-    condition {
-      test     = "ArnLike"
-      variable = "AWS:SourceArn"
-      values   = [
-        format("arn:aws:bedrock:%s:%s:flow/*", var.aws_region, data.aws_caller_identity.current.account_id)
-      ]
-    }
+    ]
+  },
+  "PermissionsPolicy": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Sid": "InvokeFoundationModels",
+        "Effect": "Allow",
+        "Action": [
+          "bedrock:InvokeModel",
+          "bedrock:InvokeModelWithResponseStream"
+        ],
+        "Resource": [
+          "arn:aws:bedrock:us-east-1::foundation-model/*"
+        ]
+      },
+      {
+        "Sid": "InvokeProvisionedModels",
+        "Effect": "Allow",
+        "Action": [
+          "bedrock:InvokeModel",
+          "bedrock:GetProvisionedModelThroughput"
+        ],
+        "Resource": [
+          "arn:aws:bedrock:us-east-1:982534393096:provisioned-model/uais-86ef73a8-*"
+        ]
+      },
+      {
+        "Sid": "AccessPromptManagement",
+        "Effect": "Allow",
+        "Action": [
+          "bedrock:GetPrompt",
+          "bedrock:RenderPrompt"
+        ],
+        "Resource": [
+          "arn:aws:bedrock:us-east-1:982534393096:prompt/uais-86ef73a8-*:*"
+        ]
+      },
+      {
+        "Sid": "QueryKnowledgeBases",
+        "Effect": "Allow",
+        "Action": [
+          "bedrock:Retrieve",
+          "bedrock:RetrieveAndGenerate"
+        ],
+        "Resource": [
+          "arn:aws:bedrock:us-east-1:982534393096:knowledge-base/uais-86ef73a8-*"
+        ]
+      },
+      {
+        "Sid": "InvokeAgentsAndCollaborators",
+        "Effect": "Allow",
+        "Action": [
+          "bedrock:InvokeAgent",
+          "bedrock:GetAgent",
+          "bedrock:GetAgentAlias"
+        ],
+        "Resource": [
+          "arn:aws:bedrock:us-east-1:982534393096:agent/uais-86ef73a8-*",
+          "arn:aws:bedrock:us-east-1:982534393096:agent-alias/uais-86ef73a8-*/*"
+        ]
+      },
+      {
+        "Sid": "InvokeLambdaFunctions",
+        "Effect": "Allow",
+        "Action": [
+          "lambda:InvokeFunction"
+        ],
+        "Resource": [
+          "arn:aws:lambda:us-east-1:982534393096:function:uais-86ef73a8-*"
+        ]
+      },
+      {
+        "Sid": "AccessLexBots",
+        "Effect": "Allow",
+        "Action": [
+          "lex:RecognizeText",
+          "lex:RecognizeUtterance",
+          "lex:PostContent",
+          "lex:PostText"
+        ],
+        "Resource": [
+          "arn:aws:lex:us-east-1:982534393096:bot-alias/uais-86ef73a8-*"
+        ]
+      },
+      {
+        "Sid": "ApplyGuardrails",
+        "Effect": "Allow",
+        "Action": [
+          "bedrock:ApplyGuardrail"
+        ],
+        "Resource": [
+          "arn:aws:bedrock:us-east-1:982534393096:guardrail/uais-86ef73a8-*"
+        ]
+      },
+      {
+        "Sid": "AccessS3ForSchemasAndWorkspace",
+        "Effect": "Allow",
+        "Action": [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:ListBucket"
+        ],
+        "Resource": [
+          "arn:aws:s3:::uais-86ef73a8-workspace-bucket",
+          "arn:aws:s3:::uais-86ef73a8-workspace-bucket/*",
+          "arn:aws:s3:::uais-86ef73a8-schemas-bucket",
+          "arn:aws:s3:::uais-86ef73a8-schemas-bucket/*"
+        ],
+        "Condition": {
+          "StringEquals": {
+            "aws:ResourceAccount": "982534393096"
+          }
+        }
+      },
+      {
+        "Sid": "AccessS3ForCodeInterpretation",
+        "Effect": "Allow",
+        "Action": [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject"
+        ],
+        "Resource": [
+          "arn:aws:s3:::uais-86ef73a8-code-interpretation-bucket/*"
+        ],
+        "Condition": {
+          "StringEquals": {
+            "aws:ResourceAccount": "982534393096"
+          }
+        }
+      },
+      {
+        "Sid": "KMSAccess",
+        "Effect": "Allow",
+        "Action": [
+          "kms:Decrypt",
+          "kms:GenerateDataKey",
+          "kms:CreateGrant"
+        ],
+        "Resource": [
+          "arn:aws:kms:us-east-1:982534393096:key/1227cc92-2315-4440-8f76-4353eb78e7c9"
+        ],
+        "Condition": {
+          "StringEquals": {
+            "kms:ViaService": [
+              "s3.us-east-1.amazonaws.com",
+              "bedrock.us-east-1.amazonaws.com"
+            ]
+          }
+        }
+      },
+      {
+        "Sid": "CloudWatchLogsForFlows",
+        "Effect": "Allow",
+        "Action": [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ],
+        "Resource": [
+          "arn:aws:logs:us-east-1:982534393096:log-group:/aws/bedrock/flows/uais-86ef73a8-*",
+          "arn:aws:logs:us-east-1:982534393096:log-group:/aws/bedrock/agents/uais-86ef73a8-*",
+          "arn:aws:logs:us-east-1:982534393096:log-group:/aws/bedrock/model-invocation-jobs/uais-86ef73a8-*"
+        ]
+      },
+      {
+        "Sid": "AccessThirdPartyKnowledgeBases",
+        "Effect": "Allow",
+        "Action": [
+          "bedrock:AssociateThirdPartyKnowledgeBase"
+        ],
+        "Resource": [
+          "arn:aws:bedrock:us-east-1:982534393096:knowledge-base/uais-86ef73a8-*"
+        ],
+        "Condition": {
+          "StringEquals": {
+            "aws:ResourceAccount": "982534393096"
+          }
+        }
+      },
+      {
+        "Sid": "SecretsManagerForThirdPartyKB",
+        "Effect": "Allow",
+        "Action": [
+          "secretsmanager:GetSecretValue"
+        ],
+        "Resource": [
+          "arn:aws:secretsmanager:us-east-1:982534393096:secret:uais-86ef73a8-*"
+        ],
+        "Condition": {
+          "StringEquals": {
+            "aws:ResourceAccount": "982534393096"
+          }
+        }
+      }
+    ]
   }
 }
-
-# IAM Policy for Bedrock Flows service operations
-resource "aws_iam_policy" "bedrock_flows_service_policy" {
-  name        = local.bedrock_flows_policy_name
-  description = "Policy for Bedrock Flows service role to access AWS resources"
-  policy      = local.bedrock_flows_policy
-
-  tags = merge(
-    var.tags,
-    {
-      provisoner = local.resource_provisioner
-      service    = "bedrock-flows"
-    }
-  )
-}
-
-# Attach the policy to the role
-resource "aws_iam_role_policy_attachment" "attach_bedrock_flows_policy" {
-  role       = aws_iam_role.bedrock_flows_service_role.name
-  policy_arn = aws_iam_policy.bedrock_flows_service_policy.arn
-}
-
-# Output the role ARN for use in other modules
-output "bedrock_flows_service_role_arn" {
-  value       = aws_iam_role.bedrock_flows_service_role.arn
-  description = "ARN of the Bedrock Flows service role"
-}
-
-# Store the role ARN in Parameter Store for service discovery
-resource "aws_ssm_parameter" "bedrock_flows_role_arn" {
-  name  = "/params/${local.base_prefix}/platform/bedrock-flows-role-arn"
-  type  = "String"
-  value = aws_iam_role.bedrock_flows_service_role.arn
-
-  tags = merge(
-    var.tags,
-    {
-      provisoner = local.resource_provisioner
-      service    = "bedrock-flows"
-    }
-  )
-}
 ```
-
-## data.tf ##
-```
-# Add this to your existing base/data.tf file
-
-data "aws_iam_policy_document" "bedrock_flows_assume_role_policy" {
-  statement {
-    actions = ["sts:AssumeRole"]
-
-    principals {
-      type        = "Service"
-      identifiers = ["bedrock.amazonaws.com"]
-    }
-
-    condition {
-      test     = "StringEquals"
-      variable = "aws:SourceAccount"
-      values   = [data.aws_caller_identity.current.account_id]
-    }
-
-    condition {
-      test     = "ArnLike"
-      variable = "AWS:SourceArn"
-      values   = [
-        format("arn:aws:bedrock:%s:%s:flow/*", data.aws_region.current.name, data.aws_caller_identity.current.account_id)
-      ]
-    }
-  }
-}
-```
-
-

@@ -19,8 +19,8 @@ Directory Structure:
 │   ├── ./base/outputs.tf
 │   ├── ./base/param_store_values.tf
 │   ├── ./base/policies
-│   │   ├── ./base/policies/bedrock_kb
-│   │   │   └── ./base/policies/bedrock_kb/bedrock_kb_custom.tpl
+│   │   ├── ./base/policies/bedrock_service
+│   │   │   └── ./base/policies/bedrock_service/bedrock_service_policy.tpl
 │   │   ├── ./base/policies/glue
 │   │   │   └── ./base/policies/glue/glue.tpl
 │   │   ├── ./base/policies/lambda
@@ -36,7 +36,7 @@ Directory Structure:
 │   │   └── ./base/policies/sagemaker
 │   │       └── ./base/policies/sagemaker/sagemaker_custom.tpl
 │   ├── ./base/provider.tf
-│   ├── ./base/role_bedrock_kb.tf
+│   ├── ./base/role_bedrock_service.tf
 │   ├── ./base/role_opensearch.tf
 │   ├── ./base/role_sagemaker.tf
 │   ├── ./base/roles_glue.tf
@@ -161,8 +161,8 @@ data "aws_region" "current" {}
 #   bucket = local.raw_data_bucket_name
 # }
 
-data "aws_iam_role" "bedrock_kb_role" {
-  name = local.bedrock_kb_role_name
+data "aws_iam_role" "bedrock_service_role" {
+  name = local.bedrock_service_role_name
 }
 
 data "aws_kms_key" "base_kms_key" {
@@ -213,7 +213,7 @@ data "aws_iam_role" "lambda_role" {
 locals {
   resource_provisioner               = "UAIS"
   base_prefix                        = "uais-${split("-", var.project_id)[0]}"
-  bedrock_kb_role_name               = "${local.base_prefix}-bedrock-kb-role"
+  bedrock_service_role_name          = "${local.base_prefix}-bedrock-service-role"
   kb_name                            = "${local.base_prefix}-kb"
   data_source_name                   = "${local.base_prefix}-kb-data-source"
   opensearch_collection_name         = "${local.base_prefix}-kb-os-collection"
@@ -273,13 +273,13 @@ resource "aws_opensearchserverless_security_policy" "aoss_network_policy" {
           ]
         }
       ],
-# Making collection public as bedrock KB cannot be vpc bound and it needs this to be public
-#         "bedrock.amazonaws.com"
-#       ],
-#       SourceVPCEs = [
-#         aws_opensearchserverless_vpc_endpoint.aoss_vpc_endpoint.id
-#       ],
-      AllowFromPublic = true
+      SourceServices = [
+        "bedrock.amazonaws.com"
+      ],
+      SourceVPCEs = [
+        aws_opensearchserverless_vpc_endpoint.aoss_vpc_endpoint.id
+      ],
+      AllowFromPublic = false
     }
   ])
 }
@@ -313,7 +313,7 @@ resource "aws_opensearchserverless_access_policy" "aoss_data_access_policy" {
       ],
       Principal = [
         data.aws_iam_role.sagemaker_role.arn,
-        data.aws_iam_role.bedrock_kb_role.arn,
+        data.aws_iam_role.bedrock_service_role.arn,
         data.aws_iam_role.lambda_role.arn
       ]
     }
@@ -333,7 +333,7 @@ resource "aws_opensearchserverless_vpc_endpoint" "aoss_vpc_endpoint" {
 # Uncomment this if it is required in future.
 # resource "aws_bedrockagent_knowledge_base" "kb" {
 #   name     = local.kb_name
-#   role_arn = data.aws_iam_role.bedrock_kb_role.arn
+#   role_arn = data.aws_iam_role.bedrock_service_role.arn
 #
 #   knowledge_base_configuration {
 #     vector_knowledge_base_configuration {
@@ -1434,13 +1434,31 @@ locals {
     param_store_resource_arn_read = local.policy_lambda_arn_ssm_read
   })
 
-  bedrock_kb_role_name   = "${local.base_prefix}-bedrock-kb-role"
-  bedrock_kb_policy_name = "${local.base_prefix}-bedrock-kb-policy"
-  bedrock_kb_policy = templatefile("${path.module}/policies/bedrock_kb/bedrock_kb_custom.tpl", {
+  bedrock_service_role_name   = "${local.base_prefix}-bedrock-service-role"
+  bedrock_service_policy_name = "${local.base_prefix}-bedrock-service-policy"
+  bedrock_service_policy = templatefile("${path.module}/policies/bedrock_service/bedrock_service_policy.tpl", {
+    # Existing variables
     workspace_bucket_arn = module.s3_bucket.workspace_bucket_arn
     aoss_arn             = "arn:aws:aoss:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:collection/*"
     embedding_model_arn  = "arn:aws:bedrock:${data.aws_region.current.name}::foundation-model/*"
     base_kms_arn         = aws_kms_key.base_kms_key.arn
+    
+    # New variables for merged policy
+    aws_region            = data.aws_region.current.name
+    account_id            = data.aws_caller_identity.current.account_id
+    base_prefix           = local.base_prefix
+    foundation_model_arn  = "arn:aws:bedrock:${data.aws_region.current.name}::foundation-model/*"
+    provisioned_model_arn = "arn:aws:bedrock:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:provisioned-model/${local.base_prefix}*"
+    prompt_arn            = "arn:aws:bedrock:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:prompt/${local.base_prefix}*:*"
+    knowledge_base_arn    = "arn:aws:bedrock:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:knowledge-base/${local.base_prefix}*"
+    agent_arn             = "arn:aws:bedrock:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:agent/${local.base_prefix}*"
+    agent_alias_arn       = "arn:aws:bedrock:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:agent-alias/${local.base_prefix}*/*"
+    lambda_function_arn   = "arn:aws:lambda:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:function:${local.base_prefix}*"
+    lex_bot_arn           = "arn:aws:lex:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:bot-alias/${local.base_prefix}*"
+    guardrail_arn         = "arn:aws:bedrock:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:guardrail/${local.base_prefix}*"
+    logs_arn_flows        = "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock/flows/${local.base_prefix}*"
+    logs_arn_agents       = "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock/agents/${local.base_prefix}*"
+    secrets_arn           = "arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:${local.base_prefix}*"
   })
 
   lex_lambda_resource_arn    = format("${local.policy_arn_prefix}:function:${local.base_prefix}*", "lambda")
@@ -1873,6 +1891,26 @@ resource "aws_ssm_parameter" "vpc_id" {
 }
 </content>
 
+<content full_path="base/role_bedrock_service.tf">
+# IAM Role for Bedrock Services
+resource "aws_iam_role" "bedrock_service_role" {
+  name = local.bedrock_service_role_name
+  assume_role_policy = data.aws_iam_policy_document.bedrock_assume_role_policy.json
+}
+
+# IAM Policy for Bedrock Services
+resource "aws_iam_policy" "bedrock_service_policy" {
+  name        = local.bedrock_service_policy_name
+  description = "Policy to allow bedrock service access to various AWS services"
+  policy      = local.bedrock_service_policy
+}
+
+resource "aws_iam_role_policy_attachment" "attach_bedrock_service_policy" {
+  role       = aws_iam_role.bedrock_service_role.name
+  policy_arn = aws_iam_policy.bedrock_service_policy.arn
+}
+</content>
+
 <content full_path="base/roles_glue.tf">
 
 resource "aws_iam_policy" "glue_exec_policy_base" {
@@ -1925,26 +1963,6 @@ variable "tags" {
 variable "aws_account_id" {
   description = "AWS Account ID"
   type        = string
-}
-</content>
-
-<content full_path="base/role_bedrock_kb.tf">
-# IAM Role for Bedrock and Lambda
-resource "aws_iam_role" "bedrock_kb_role" {
-  name = local.bedrock_kb_role_name
-  assume_role_policy = data.aws_iam_policy_document.bedrock_assume_role_policy.json
-}
-
-# IAM Policy for S3 and OpenSearch access
-resource "aws_iam_policy" "bedrock_kb_policy" {
-  name        = local.bedrock_kb_policy_name
-  description = "Policy to allow bedrock knowledge base access to S3 and OpenSearch"
-  policy      = local.bedrock_kb_policy
-}
-
-resource "aws_iam_role_policy_attachment" "attach_bedrock_kb_policy" {
-  role       = aws_iam_role.bedrock_kb_role.name
-  policy_arn = aws_iam_policy.bedrock_kb_policy.arn
 }
 </content>
 
@@ -2223,52 +2241,6 @@ variable "tags" {
         "kms:CreateGrant"
       ],
       "Resource": "${base_kms_arn}"
-    }
-  ]
-}
-</content>
-
-<content full_path="base/policies/bedrock_kb/bedrock_kb_custom.tpl">
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "s3:GetObject",
-        "s3:ListBucket",
-        "s3:PutObject"
-      ],
-      "Resource": [
-        "${workspace_bucket_arn}",
-        "${workspace_bucket_arn}/*"
-      ]
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "aoss:APIAccessAll"
-      ],
-      "Resource": "${aoss_arn}"
-    },
-    {
-      "Action": [
-        "kms:Decrypt",
-        "kms:GenerateDataKey",
-        "kms:CreateGrant"
-      ],
-      "Effect": "Allow",
-      "Resource": "${base_kms_arn}"
-    },
-    {
-      "Sid": "BedrockInvokeModelStatement",
-      "Effect": "Allow",
-      "Action": [
-        "bedrock:InvokeModel"
-      ],
-      "Resource": [
-        "${embedding_model_arn}"
-      ]
     }
   ]
 }
@@ -2696,6 +2668,179 @@ variable "tags" {
 			"Resource": "*"
 		}
 	]
+}
+</content>
+
+<content full_path="base/policies/bedrock_service/bedrock_service_policy.tpl">
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "S3Access",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:ListBucket",
+        "s3:PutObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": [
+        "${workspace_bucket_arn}",
+        "${workspace_bucket_arn}/*"
+      ]
+    },
+    {
+      "Sid": "OpenSearchAccess",
+      "Effect": "Allow",
+      "Action": [
+        "aoss:APIAccessAll"
+      ],
+      "Resource": "${aoss_arn}"
+    },
+    {
+      "Sid": "KMSAccess",
+      "Action": [
+        "kms:Decrypt",
+        "kms:GenerateDataKey",
+        "kms:CreateGrant"
+      ],
+      "Effect": "Allow",
+      "Resource": "${base_kms_arn}"
+    },
+    {
+      "Sid": "BedrockInvokeModelStatement",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel"
+      ],
+      "Resource": [
+        "${embedding_model_arn}"
+      ]
+    },
+    {
+      "Sid": "InvokeFoundationModels",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
+      "Resource": [
+        "${foundation_model_arn}"
+      ]
+    },
+    {
+      "Sid": "InvokeProvisionedModels",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:GetProvisionedModelThroughput"
+      ],
+      "Resource": [
+        "${provisioned_model_arn}"
+      ]
+    },
+    {
+      "Sid": "AccessPromptManagement",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:GetPrompt",
+        "bedrock:RenderPrompt"
+      ],
+      "Resource": [
+        "${prompt_arn}"
+      ]
+    },
+    {
+      "Sid": "QueryKnowledgeBases",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:Retrieve",
+        "bedrock:RetrieveAndGenerate"
+      ],
+      "Resource": [
+        "${knowledge_base_arn}"
+      ]
+    },
+    {
+      "Sid": "InvokeAgentsAndCollaborators",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeAgent",
+        "bedrock:GetAgent",
+        "bedrock:GetAgentAlias"
+      ],
+      "Resource": [
+        "${agent_arn}",
+        "${agent_alias_arn}"
+      ]
+    },
+    {
+      "Sid": "InvokeLambdaFunctions",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:InvokeFunction"
+      ],
+      "Resource": [
+        "${lambda_function_arn}"
+      ]
+    },
+    {
+      "Sid": "AccessLexBots",
+      "Effect": "Allow",
+      "Action": [
+        "lex:RecognizeText",
+        "lex:RecognizeUtterance",
+        "lex:PostContent",
+        "lex:PostText"
+      ],
+      "Resource": [
+        "${lex_bot_arn}"
+      ]
+    },
+    {
+      "Sid": "ApplyGuardrails",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:ApplyGuardrail"
+      ],
+      "Resource": [
+        "${guardrail_arn}"
+      ]
+    },
+    {
+      "Sid": "CloudWatchLogsForFlows",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": [
+        "${logs_arn_flows}",
+        "${logs_arn_agents}"
+      ]
+    },
+    {
+      "Sid": "AccessThirdPartyKnowledgeBases",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:AssociateThirdPartyKnowledgeBase"
+      ],
+      "Resource": [
+        "${knowledge_base_arn}"
+      ]
+    },
+    {
+      "Sid": "SecretsManagerForThirdPartyKB",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:GetSecretValue"
+      ],
+      "Resource": [
+        "${secrets_arn}"
+      ]
+    }
+  ]
 }
 </content>
 

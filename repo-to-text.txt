@@ -812,6 +812,10 @@ data "aws_iam_role" "sagemaker_domain_exec_role" {
   name = "${local.base_prefix}-sagemaker-domain-exec-role"
 }
 
+data "aws_iam_role" "bedrock_service_role" {
+  name = local.bedrock_service_role_name
+}
+
 # Fetch the OpenSearch security group created in the base module
 data "aws_security_group" "opensearch_sg" {
   filter {
@@ -862,6 +866,7 @@ locals {
   base_prefix          = "uais-${split("-", var.project_id)[0]}"
   kms_key_alias        = "alias/${local.base_prefix}-kms-key"
   opensearch_master_role_name = "${local.base_prefix}-opensearch-master-role"
+  bedrock_service_role_name = "${local.base_prefix}-bedrock-service-role"
 }
 </content>
 
@@ -955,11 +960,12 @@ resource "aws_opensearch_domain" "opensearch" {
           AWS = [
             data.aws_iam_role.opensearch_master_role.arn,
             data.aws_iam_role.lambda_exec_role.arn,
-            data.aws_iam_role.sagemaker_domain_exec_role.arn
+            data.aws_iam_role.sagemaker_domain_exec_role.arn,
+            data.aws_iam_role.bedrock_service_role.arn
           ]
         }
         Action   = "es:*"
-        Resource = "arn:aws:es:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:domain/${local.base_prefix}-opensearch/*"
+        Resource = "arn:aws:es:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:domain/${local.base_prefix}-opensearch/*"
       }
     ]
   })
@@ -982,7 +988,7 @@ resource "aws_opensearch_domain" "opensearch" {
 
 # CloudWatch log groups for OpenSearch logs
 resource "aws_cloudwatch_log_group" "opensearch_slow_logs" {
-  name              = "/aws/opensearch/domains/${local.base_prefix}-opensearch/search-slow-logs"
+  name              = "/aws/opensearch/domains/${local.base_prefix}/search-slow-logs"
   retention_in_days = 30
   # kms_key_id        = data.aws_kms_key.base_kms_key.arn
 
@@ -995,7 +1001,7 @@ resource "aws_cloudwatch_log_group" "opensearch_slow_logs" {
 }
 
 resource "aws_cloudwatch_log_group" "opensearch_app_logs" {
-  name              = "/aws/opensearch/domains/${local.base_prefix}-opensearch/application-logs"
+  name              = "/aws/opensearch/domains/${local.base_prefix}/application-logs"
   retention_in_days = 30
   # kms_key_id        = data.aws_kms_key.base_kms_key.arn
 
@@ -1008,7 +1014,7 @@ resource "aws_cloudwatch_log_group" "opensearch_app_logs" {
 }
 
 resource "aws_cloudwatch_log_group" "opensearch_audit_logs" {
-  name              = "/aws/opensearch/domains/${local.base_prefix}-opensearch/audit-logs"
+  name              = "/aws/opensearch/domains/${local.base_prefix}/audit-logs"
   retention_in_days = 90
   # kms_key_id        = data.aws_kms_key.base_kms_key.arn
 
@@ -1378,7 +1384,11 @@ locals {
 
   policy_lambda_arn_dynamodb = format("${local.policy_arn_prefix}:table/${local.base_prefix}-*", "dynamodb") # Eg: arn:aws:dynamodb:us-east-1:952189540345:table/uais-b4854dd4-employee*
 
-  lambda_policy_base = templatefile("${local.policy_lambda_template_path}/base.json.tpl", {})
+  lambda_policy_base = templatefile("${local.policy_lambda_template_path}/base.json.tpl", {
+    base_prefix = local.base_prefix
+    aws_region = var.aws_region
+    aws_account_id = var.aws_account_id
+  })
   ddb_table_prefix = "${local.base_prefix}-"
   lambda_policy_data = templatefile("${local.policy_lambda_template_path}/data.json.tpl", {
     dynamodb_resource_arn = local.policy_lambda_arn_dynamodb
@@ -1467,6 +1477,9 @@ locals {
   lex_policy = templatefile("${path.module}/policies/lex/lex.tpl", {
     lex_lambda_resource_arn = local.lex_lambda_resource_arn
     lex_logs_resource_arn   = local.lex_logs_resource_arn
+    base_prefix                                               = local.base_prefix
+    aws_account_id                                            = var.aws_account_id
+    aws_region                                                = var.aws_region
   })
 
   policy_lex_base = "${local.base_prefix}-lex-service-policy"
@@ -1481,7 +1494,9 @@ locals {
     service_bucket_arn                                        = module.s3_bucket.service_bucket_arn
     glue_catalog_database_arn                                 = format("${local.policy_arn_prefix}:%s/${local.glue_catalog}", "glue", "database")
     glue_catalog_table_arn                                    = format("${local.policy_arn_prefix}:%s/${local.glue_catalog}", "glue", "table")
-    glue_log_group_arn                                        = format("${local.policy_arn_prefix}:log-group:/aws-glue/*", "logs")
+    base_prefix                                               = local.base_prefix
+    aws_account_id                                            = var.aws_account_id
+    aws_region                                                = var.aws_region
     param_store_allow_catalog_read_and_create_for_crawler_arn = format("${local.policy_arn_prefix}:catalog", "glue")
   })
 
@@ -1767,7 +1782,7 @@ resource "aws_ecr_repository" "base_ecr_repository" {
 }
 
 resource "aws_cloudwatch_log_group" "lex_conversation_logs" {
-  name              = "/aws/lex/${local.base_prefix}-lex"
+  name              = "/aws/lex/${local.base_prefix}"
   retention_in_days = 90
 
   tags = merge(
@@ -2173,13 +2188,18 @@ variable "tags" {
       "Sid": "AllowCloudWatchLogsForGlueJob",
       "Effect": "Allow",
       "Action": [
-        "logs:CreateLogGroup",
+        "logs:CreateLogGroup"
+      ],
+      "Resource": "arn:aws:logs:${aws_region}:${aws_account_id}:log-group:/aws/glue/${base_prefix}-*"
+    },
+    {
+      "Sid": "AllowLogStreamOperationsForGlue",
+      "Effect": "Allow",
+      "Action": [
         "logs:CreateLogStream",
         "logs:PutLogEvents"
       ],
-      "Resource": [
-        "${glue_log_group_arn}"
-      ]
+      "Resource": "arn:aws:logs:${aws_region}:${aws_account_id}:log-group:/aws/glue/*"
     }
   ]
 }
@@ -2196,14 +2216,19 @@ variable "tags" {
       "Resource": "${lex_lambda_resource_arn}"
     },
     {
-      "Sid": "AllowCloudWatchLogsForLex",
+      "Sid": "AllowLogGroupCreationForLex",
+      "Effect": "Allow",
+      "Action": "logs:CreateLogGroup",
+      "Resource": "arn:aws:logs:${aws_region}:${aws_account_id}:log-group:/aws/lex/${base_prefix}-*"
+    },
+    {
+      "Sid": "AllowLogStreamOperationsForLex",
       "Effect": "Allow",
       "Action": [
-        "logs:CreateLogGroup",
         "logs:CreateLogStream",
         "logs:PutLogEvents"
       ],
-      "Resource": "${lex_logs_resource_arn}"
+      "Resource": "arn:aws:logs:${aws_region}:${aws_account_id}:log-group:/aws/lex/${base_prefix}*:*"
     }
   ]
 }
@@ -2251,13 +2276,19 @@ variable "tags" {
   "Version": "2012-10-17",
   "Statement": [
     {
+      "Sid": "AllowLogGroupCreation",
+      "Effect": "Allow",
+      "Action": "logs:CreateLogGroup",
+      "Resource": "arn:aws:logs:${aws_region}:${aws_account_id}:log-group:/aws/lambda/${base_prefix}-*"
+    },
+    {
+      "Sid": "AllowLogStreamOperations",
       "Effect": "Allow",
       "Action": [
-        "logs:CreateLogGroup",
         "logs:CreateLogStream",
         "logs:PutLogEvents"
       ],
-      "Resource": "*"
+      "Resource": "arn:aws:logs:${aws_region}:${aws_account_id}:log-group:/aws/lambda/${base_prefix}-*:*"
     },
     {
       "Effect": "Allow",
@@ -2808,16 +2839,30 @@ variable "tags" {
       ]
     },
     {
-      "Sid": "CloudWatchLogsForFlows",
+      "Sid": "CloudWatchLogsForBedrockServices",
       "Effect": "Allow",
       "Action": [
-        "logs:CreateLogGroup",
+        "logs:CreateLogGroup"
+      ],
+      "Resource": [
+        "arn:aws:logs:${aws_region}:${account_id}:log-group:/aws/bedrock/flows/${base_prefix}-*",
+        "arn:aws:logs:${aws_region}:${account_id}:log-group:/aws/bedrock/agents/${base_prefix}-*",
+        "arn:aws:logs:${aws_region}:${account_id}:log-group:/aws/bedrock/knowledge-bases/${base_prefix}-*",
+        "arn:aws:logs:${aws_region}:${account_id}:log-group:/aws/bedrock/guardrails/${base_prefix}-*"
+      ]
+    },
+    {
+      "Sid": "CloudWatchLogStreamsForBedrockServices",
+      "Effect": "Allow",
+      "Action": [
         "logs:CreateLogStream",
         "logs:PutLogEvents"
       ],
       "Resource": [
-        "${logs_arn_flows}",
-        "${logs_arn_agents}"
+        "arn:aws:logs:${aws_region}:${account_id}:log-group:/aws/bedrock/flows/${base_prefix}-*:*",
+        "arn:aws:logs:${aws_region}:${account_id}:log-group:/aws/bedrock/agents/${base_prefix}-*:*",
+        "arn:aws:logs:${aws_region}:${account_id}:log-group:/aws/bedrock/knowledge-bases/${base_prefix}-*:*",
+        "arn:aws:logs:${aws_region}:${account_id}:log-group:/aws/bedrock/guardrails/${base_prefix}-*:*"
       ]
     },
     {

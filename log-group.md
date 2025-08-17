@@ -1,330 +1,550 @@
-Perfect! Let's update your Terraform code step by step to implement this clean approach where AWS auto-creates log groups.
-
-## 📋 Step-by-Step Terraform Updates
-
-### **Step 1: Review What to Keep** ✅
-
-Looking at your current code, these log groups should STAY:
-
-1. **OpenSearch log groups** in `managed-opensearch/main.tf` - ✅ Keep (platform-managed)
-2. **Lex conversation log group** in `base/main.tf` - ✅ Keep (optional, for conversation logging)
-
-### **Step 2: Update Lambda IAM Policy** 🔧
-
-**File:** `base/policies/lambda/base.json.tpl`
-
-**Current:**
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "logs:CreateLogGroup",
-        "logs:CreateLogStream",
-        "logs:PutLogEvents"
-      ],
-      "Resource": "*"
-    },
-    ...
-  ]
-}
+## Template
 ```
-
-**Update to:**
-```json
 {
-  "Version": "2012-10-17",
-  "Statement": [
+  "widgets": [
     {
-      "Sid": "AllowLogGroupCreation",
-      "Effect": "Allow",
-      "Action": "logs:CreateLogGroup",
-      "Resource": "arn:aws:logs:*:*:log-group:/aws/lambda/${base_prefix}-*"
+      "type": "log",
+      "x": 0,
+      "y": 0,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Total Bedrock Invocations (Agents + Flows + KB)",
+        "query": "SOURCE '/aws/bedrock/agents/${base_prefix}-*' | SOURCE '/aws/bedrock/flows/${base_prefix}-*' | SOURCE '/aws/bedrock/knowledge-bases/${base_prefix}-*' | fields @timestamp, @message | filter @message like /InvokeModel|InvokeAgent|InvokeFlow|Retrieve|RetrieveAndGenerate/ | stats count() as invocations by bin(1h) as time | sort time desc",
+        "region": "${aws_region}",
+        "stacked": false,
+        "view": "timeSeries",
+        "yAxis": {
+          "left": {
+            "label": "Invocations"
+          }
+        }
+      }
     },
     {
-      "Sid": "AllowLogStreamOperations",
-      "Effect": "Allow",
-      "Action": [
-        "logs:CreateLogStream",
-        "logs:PutLogEvents"
-      ],
-      "Resource": "arn:aws:logs:*:*:log-group:/aws/lambda/${base_prefix}-*:*"
+      "type": "log",
+      "x": 12,
+      "y": 0,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Model Usage Distribution",
+        "query": "SOURCE '/aws/bedrock/agents/${base_prefix}-*' | SOURCE '/aws/bedrock/flows/${base_prefix}-*' | SOURCE '/aws/bedrock/knowledge-bases/${base_prefix}-*' | fields @message | filter @message like /modelId/ | parse @message /\"modelId\":\"(?<model>[^\"]+)\"/ | stats count() as usage by model | sort usage desc",
+        "region": "${aws_region}",
+        "stacked": false,
+        "view": "pie"
+      }
     },
     {
-      "Effect": "Allow",
-      "Action": [
-        "ec2:CreateNetworkInterface",
-        "ec2:DescribeNetworkInterfaces",
-        "ec2:DeleteNetworkInterface"
-      ],
-      "Resource": "*"
+      "type": "log",
+      "x": 0,
+      "y": 6,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Input Token Consumption Trend",
+        "query": "SOURCE '/aws/bedrock/agents/${base_prefix}-*' | SOURCE '/aws/bedrock/flows/${base_prefix}-*' | SOURCE '/aws/bedrock/knowledge-bases/${base_prefix}-*' | fields @timestamp, @message | filter @message like /inputTokens/ | parse @message /\"inputTokens\":(?<inputTokens>\\d+)/ | stats sum(inputTokens) as total_input_tokens by bin(1h) as time | sort time desc",
+        "region": "${aws_region}",
+        "stacked": false,
+        "view": "timeSeries",
+        "yAxis": {
+          "left": {
+            "label": "Input Tokens"
+          }
+        }
+      }
+    },
+    {
+      "type": "log",
+      "x": 12,
+      "y": 6,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Output Token Consumption Trend",
+        "query": "SOURCE '/aws/bedrock/agents/${base_prefix}-*' | SOURCE '/aws/bedrock/flows/${base_prefix}-*' | SOURCE '/aws/bedrock/knowledge-bases/${base_prefix}-*' | fields @timestamp, @message | filter @message like /outputTokens/ | parse @message /\"outputTokens\":(?<outputTokens>\\d+)/ | stats sum(outputTokens) as total_output_tokens by bin(1h) as time | sort time desc",
+        "region": "${aws_region}",
+        "stacked": false,
+        "view": "timeSeries",
+        "yAxis": {
+          "left": {
+            "label": "Output Tokens"
+          }
+        }
+      }
+    },
+    {
+      "type": "log",
+      "x": 0,
+      "y": 12,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Error Patterns Across All Bedrock Services",
+        "query": "SOURCE '/aws/bedrock/agents/${base_prefix}-*' | SOURCE '/aws/bedrock/flows/${base_prefix}-*' | SOURCE '/aws/bedrock/knowledge-bases/${base_prefix}-*' | SOURCE '/aws/bedrock/guardrails/${base_prefix}-*' | fields @timestamp, @message, @logStream | filter @message like /ERROR|FAILED|Exception|Throttl|Timeout/ | stats count() as errors by bin(5m) as time | sort time desc",
+        "region": "${aws_region}",
+        "stacked": false,
+        "view": "timeSeries",
+        "yAxis": {
+          "left": {
+            "label": "Error Count"
+          }
+        }
+      }
+    },
+    {
+      "type": "log",
+      "x": 12,
+      "y": 12,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Top Error Types",
+        "query": "SOURCE '/aws/bedrock/agents/${base_prefix}-*' | SOURCE '/aws/bedrock/flows/${base_prefix}-*' | SOURCE '/aws/bedrock/knowledge-bases/${base_prefix}-*' | SOURCE '/aws/bedrock/guardrails/${base_prefix}-*' | fields @message | filter @message like /ERROR|FAILED|Exception/ | parse @message /(?<error_type>Throttl|Timeout|ValidationException|AccessDeniedException|ResourceNotFoundException|ServiceException|KnowledgeBaseException|GuardrailException)/ | stats count() as occurrences by error_type | sort occurrences desc | limit 10",
+        "region": "${aws_region}",
+        "view": "table"
+      }
+    },
+    {
+      "type": "log",
+      "x": 0,
+      "y": 18,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Token Usage by Model (Cost Proxy)",
+        "query": "SOURCE '/aws/bedrock/agents/${base_prefix}-*' | SOURCE '/aws/bedrock/flows/${base_prefix}-*' | SOURCE '/aws/bedrock/knowledge-bases/${base_prefix}-*' | fields @message | filter @message like /modelId/ and @message like /Tokens/ | parse @message /\"modelId\":\"(?<model>[^\"]+)\".*\"inputTokens\":(?<input>\\d+).*\"outputTokens\":(?<output>\\d+)/ | stats sum(input) as total_input, sum(output) as total_output by model",
+        "region": "${aws_region}",
+        "view": "table"
+      }
+    },
+    {
+      "type": "log",
+      "x": 12,
+      "y": 18,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Response Latency Distribution (P50, P90, P99)",
+        "query": "SOURCE '/aws/bedrock/agents/${base_prefix}-*' | SOURCE '/aws/bedrock/flows/${base_prefix}-*' | SOURCE '/aws/bedrock/knowledge-bases/${base_prefix}-*' | fields @timestamp, @message | filter @message like /latency|duration/ | parse @message /\"latency\":(?<latency>\\d+)/ | stats pct(latency, 50) as p50, pct(latency, 90) as p90, pct(latency, 99) as p99 by bin(5m) as time | sort time desc",
+        "region": "${aws_region}",
+        "stacked": false,
+        "view": "timeSeries",
+        "yAxis": {
+          "left": {
+            "label": "Latency (ms)"
+          }
+        }
+      }
+    },
+    {
+      "type": "log",
+      "x": 0,
+      "y": 24,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Top 10 Most Active Agents",
+        "query": "SOURCE '/aws/bedrock/agents/${base_prefix}-*' | fields @logStream, @message | filter @message like /InvokeAgent/ | stats count() as invocations by @logStream as agent | sort invocations desc | limit 10",
+        "region": "${aws_region}",
+        "view": "table"
+      }
+    },
+    {
+      "type": "log",
+      "x": 12,
+      "y": 24,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Top 10 Most Active Flows",
+        "query": "SOURCE '/aws/bedrock/flows/${base_prefix}-*' | fields @logStream, @message | filter @message like /InvokeFlow/ | stats count() as invocations by @logStream as flow | sort invocations desc | limit 10",
+        "region": "${aws_region}",
+        "view": "table"
+      }
+    },
+    {
+      "type": "log",
+      "x": 0,
+      "y": 30,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Knowledge Base Retrieval Operations",
+        "query": "SOURCE '/aws/bedrock/knowledge-bases/${base_prefix}-*' | fields @timestamp, @message | filter @message like /Retrieve|RetrieveAndGenerate/ | parse @message /\"operation\":\"(?<operation>[^\"]+)\".*\"documentsRetrieved\":(?<docs>\\d+)/ | stats count() as retrievals, avg(docs) as avg_docs_retrieved by bin(1h) as time | sort time desc",
+        "region": "${aws_region}",
+        "stacked": false,
+        "view": "timeSeries",
+        "yAxis": {
+          "left": {
+            "label": "Retrievals"
+          },
+          "right": {
+            "label": "Avg Docs Retrieved"
+          }
+        }
+      }
+    },
+    {
+      "type": "log",
+      "x": 12,
+      "y": 30,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Knowledge Base Performance Metrics",
+        "query": "SOURCE '/aws/bedrock/knowledge-bases/${base_prefix}-*' | fields @message | filter @message like /retrievalLatency|relevanceScore/ | parse @message /\"retrievalLatency\":(?<latency>\\d+).*\"relevanceScore\":(?<score>[0-9.]+)/ | stats avg(latency) as avg_latency, avg(score) as avg_relevance by bin(15m) as time | sort time desc",
+        "region": "${aws_region}",
+        "stacked": false,
+        "view": "timeSeries",
+        "yAxis": {
+          "left": {
+            "label": "Latency (ms)"
+          },
+          "right": {
+            "label": "Relevance Score"
+          }
+        }
+      }
+    },
+    {
+      "type": "log",
+      "x": 0,
+      "y": 36,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Guardrail Violations and Applications",
+        "query": "SOURCE '/aws/bedrock/guardrails/${base_prefix}-*' | fields @timestamp, @message | filter @message like /guardrail/ | parse @message /\"action\":\"(?<action>[^\"]+)\".*\"violationType\":\"(?<violation>[^\"]+)\"/ | stats count() as total by action, violation | sort total desc",
+        "region": "${aws_region}",
+        "view": "table"
+      }
+    },
+    {
+      "type": "log",
+      "x": 12,
+      "y": 36,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Guardrail Application Trend",
+        "query": "SOURCE '/aws/bedrock/guardrails/${base_prefix}-*' | fields @timestamp, @message | filter @message like /ApplyGuardrail/ | parse @message /\"action\":\"(?<action>[^\"]+)\"/ | stats count() as applications by action, bin(1h) as time | sort time desc",
+        "region": "${aws_region}",
+        "stacked": true,
+        "view": "timeSeries",
+        "yAxis": {
+          "left": {
+            "label": "Guardrail Applications"
+          }
+        }
+      }
+    },
+    {
+      "type": "log",
+      "x": 0,
+      "y": 42,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "User Session Patterns",
+        "query": "SOURCE '/aws/bedrock/agents/${base_prefix}-*' | SOURCE '/aws/bedrock/flows/${base_prefix}-*' | fields @timestamp, @message | filter @message like /userId|sessionId/ | parse @message /\"userId\":\"(?<user>[^\"]+)\".*\"sessionId\":\"(?<session>[^\"]+)\"/ | stats count() as interactions, dc(session) as unique_sessions by user | sort interactions desc | limit 20",
+        "region": "${aws_region}",
+        "view": "table"
+      }
+    },
+    {
+      "type": "log",
+      "x": 12,
+      "y": 42,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Active Sessions Over Time",
+        "query": "SOURCE '/aws/bedrock/agents/${base_prefix}-*' | SOURCE '/aws/bedrock/flows/${base_prefix}-*' | fields @timestamp, @message | filter @message like /sessionId/ | parse @message /\"sessionId\":\"(?<session>[^\"]+)\"/ | stats dc(session) as active_sessions by bin(1h) as time | sort time desc",
+        "region": "${aws_region}",
+        "stacked": false,
+        "view": "timeSeries",
+        "yAxis": {
+          "left": {
+            "label": "Active Sessions"
+          }
+        }
+      }
     }
   ]
 }
 ```
 
-### **Step 3: Update Lambda Secret Policy Template** 🔧
 
-**File:** `base/policies/lambda/secret.json.tpl`
-
-**Update the template file reference in** `base/locals.tf`:
-
-```hcl
-lambda_policy_base = templatefile("${local.policy_lambda_template_path}/base.json.tpl", {
-  base_prefix = local.base_prefix  # Add this parameter
-})
+## Code 
 ```
+# CloudWatch Log Groups for Bedrock Services
+resource "aws_cloudwatch_log_group" "bedrock_knowledge_bases_logs" {
+  count             = var.enable_bedrock_dashboard ? 1 : 0
+  name              = "/aws/bedrock/knowledge-bases/${local.base_prefix}"
+  retention_in_days = 30
 
-### **Step 4: Update Glue IAM Policy** 🔧
-
-**File:** `base/policies/glue/glue.tpl`
-
-**Current has:**
-```json
-{
-  "Sid": "AllowCloudWatchLogsForGlueJob",
-  "Effect": "Allow",
-  "Action": [
-    "logs:CreateLogGroup",
-    "logs:CreateLogStream",
-    "logs:PutLogEvents"
-  ],
-  "Resource": [
-    "${glue_log_group_arn}"
-  ]
-}
-```
-
-**Update to:**
-```json
-{
-  "Sid": "AllowCloudWatchLogsForGlueJob",
-  "Effect": "Allow",
-  "Action": [
-    "logs:CreateLogGroup"
-  ],
-  "Resource": "arn:aws:logs:*:*:log-group:/aws/glue/${base_prefix}-*"
-},
-{
-  "Sid": "AllowLogStreamOperationsForGlue",
-  "Effect": "Allow",
-  "Action": [
-    "logs:CreateLogStream",
-    "logs:PutLogEvents"
-  ],
-  "Resource": "arn:aws:logs:*:*:log-group:/aws/glue/*"
-}
-```
-
-**Update the template reference in** `base/locals.tf`:
-
-```hcl
-glue_policy = templatefile("${path.module}/policies/glue/glue.tpl", {
-  workspace_bucket_arn = module.s3_bucket.workspace_bucket_arn
-  service_bucket_arn = module.s3_bucket.service_bucket_arn
-  glue_catalog_database_arn = format("${local.policy_arn_prefix}:%s/${local.glue_catalog}", "glue", "database")
-  glue_catalog_table_arn = format("${local.policy_arn_prefix}:%s/${local.glue_catalog}", "glue", "table")
-  base_prefix = local.base_prefix  # Add this
-  param_store_allow_catalog_read_and_create_for_crawler_arn = format("${local.policy_arn_prefix}:catalog", "glue")
-})
-```
-
-### **Step 5: Update Bedrock Service Policy** 🔧
-
-**File:** `base/policies/bedrock_service/bedrock_service_policy.tpl`
-
-**Current has:**
-```json
-{
-  "Sid": "CloudWatchLogsForFlows",
-  "Effect": "Allow",
-  "Action": [
-    "logs:CreateLogGroup",
-    "logs:CreateLogStream",
-    "logs:PutLogEvents"
-  ],
-  "Resource": [
-    "${logs_arn_flows}",
-    "${logs_arn_agents}"
-  ]
-}
-```
-
-**Update to:**
-```json
-{
-  "Sid": "AllowLogGroupCreationForBedrock",
-  "Effect": "Allow",
-  "Action": "logs:CreateLogGroup",
-  "Resource": [
-    "arn:aws:logs:${aws_region}:${account_id}:log-group:/aws/bedrock/flows/${base_prefix}-*",
-    "arn:aws:logs:${aws_region}:${account_id}:log-group:/aws/bedrock/agents/${base_prefix}-*"
-  ]
-},
-{
-  "Sid": "AllowLogStreamOperationsForBedrock",
-  "Effect": "Allow",
-  "Action": [
-    "logs:CreateLogStream",
-    "logs:PutLogEvents"
-  ],
-  "Resource": [
-    "arn:aws:logs:${aws_region}:${account_id}:log-group:/aws/bedrock/flows/${base_prefix}-*:*",
-    "arn:aws:logs:${aws_region}:${account_id}:log-group:/aws/bedrock/agents/${base_prefix}-*:*"
-  ]
-}
-```
-
-### **Step 6: Clean Up Locals** 🔧
-
-**File:** `base/locals.tf`
-
-Remove these lines (no longer needed):
-```hcl
-# Remove these as we're not pre-creating these log groups
-# glue_log_group_arn = format("${local.policy_arn_prefix}:log-group:/aws-glue/*", "logs")
-# logs_arn_flows = "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock/flows/${local.base_prefix}*"
-# logs_arn_agents = "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock/agents/${local.base_prefix}*"
-```
-
-### **Step 7: Update Lex Policy (Optional)** 🔧
-
-**File:** `base/policies/lex/lex.tpl`
-
-Since you're keeping the Lex conversation log group, update the policy to be more flexible:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
+  tags = merge(
+    var.tags,
     {
-      "Sid": "AllowLambdaInvocationForLex",
-      "Effect": "Allow",
-      "Action": "lambda:InvokeFunction",
-      "Resource": "${lex_lambda_resource_arn}"
-    },
-    {
-      "Sid": "AllowLogGroupCreationForLex",
-      "Effect": "Allow",
-      "Action": "logs:CreateLogGroup",
-      "Resource": "arn:aws:logs:*:*:log-group:/aws/lex/${base_prefix}-*"
-    },
-    {
-      "Sid": "AllowLogStreamOperationsForLex",
-      "Effect": "Allow",
-      "Action": [
-        "logs:CreateLogStream",
-        "logs:PutLogEvents"
-      ],
-      "Resource": "arn:aws:logs:*:*:log-group:/aws/lex/${base_prefix}*:*"
+      provisoner = local.resource_provisioner
     }
+  )
+}
+
+resource "aws_cloudwatch_log_group" "bedrock_guardrails_logs" {
+  count             = var.enable_bedrock_dashboard ? 1 : 0
+  name              = "/aws/bedrock/guardrails/${local.base_prefix}"
+  retention_in_days = 30
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+resource "aws_cloudwatch_log_group" "bedrock_flows_logs" {
+  count             = var.enable_bedrock_dashboard ? 1 : 0
+  name              = "/aws/bedrock/flows/${local.base_prefix}"
+  retention_in_days = 30
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+resource "aws_cloudwatch_log_group" "bedrock_agents_logs" {
+  count             = var.enable_bedrock_dashboard ? 1 : 0
+  name              = "/aws/bedrock/agents/${local.base_prefix}"
+  retention_in_days = 30
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+# CloudWatch Dashboard for Bedrock AI Usage Monitoring
+resource "aws_cloudwatch_dashboard" "bedrock_ai_usage" {
+  count = var.enable_bedrock_dashboard ? 1 : 0
+  
+  dashboard_name = "${local.base_prefix}-bedrock-ai-usage"
+
+  dashboard_body = templatefile("${path.module}/dashboards/bedrock_dashboard.tpl", {
+    base_prefix = local.base_prefix
+    aws_region  = var.aws_region
+  })
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner  = local.resource_provisioner
+      name        = "${local.base_prefix}-bedrock-ai-usage-dashboard"
+      description = "Monitors comprehensive Bedrock AI usage across all services in the project"
+    }
+  )
+
+  depends_on = [
+    aws_cloudwatch_log_group.bedrock_agents_logs,
+    aws_cloudwatch_log_group.bedrock_flows_logs,
+    aws_cloudwatch_log_group.bedrock_knowledge_bases_logs,
+    aws_cloudwatch_log_group.bedrock_guardrails_logs
   ]
 }
-```
 
-Update the template reference in `base/locals.tf`:
-```hcl
-lex_policy = templatefile("${path.module}/policies/lex/lex.tpl", {
-  lex_lambda_resource_arn = local.lex_lambda_resource_arn
-  base_prefix = local.base_prefix  # Add this
-})
-```
+# CloudWatch Alarms for Bedrock Monitoring
+resource "aws_cloudwatch_metric_alarm" "bedrock_high_error_rate" {
+  count = var.enable_bedrock_dashboard && var.enable_bedrock_alarms ? 1 : 0
 
-### **Step 8: Add Documentation Outputs** 📝
+  alarm_name          = "${local.base_prefix}-bedrock-high-error-rate"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "2"
+  threshold           = var.bedrock_error_threshold
+  alarm_description   = "This metric monitors Bedrock error rate"
+  insufficient_data_actions = []
 
-**File:** `base/outputs.tf`
+  metric_query {
+    id = "e1"
+    
+    metric {
+      metric_name = "Errors"
+      namespace   = "AWS/Logs"
+      period      = "300"
+      stat        = "Sum"
 
-Add these helpful outputs for users:
-
-```hcl
-# Add these outputs to help users understand the logging structure
-output "project_prefix" {
-  value       = local.base_prefix
-  description = "Required prefix for all user-created resources"
-}
-
-output "log_group_patterns" {
-  value = {
-    lambda     = "/aws/lambda/${local.base_prefix}-*"
-    glue       = "/aws/glue/${local.base_prefix}-*"
-    bedrock    = "/aws/bedrock/*/${local.base_prefix}-*"
-    lex        = "/aws/lex/${local.base_prefix}-*"
-    opensearch = "/aws/opensearch/domains/${local.base_prefix}-opensearch/*"
+      dimensions = {
+        LogGroupName = "/aws/bedrock/agents/${local.base_prefix}"
+      }
+    }
   }
-  description = "Expected log group patterns for monitoring"
-}
 
-output "cloudwatch_insights_queries" {
-  value = {
-    all_project_logs = "fields @timestamp, @logGroup, @message | filter @logGroup like /${local.base_prefix}/ | sort @timestamp desc"
-    lambda_errors    = "fields @timestamp, @message | filter @logGroup like /\\/aws\\/lambda\\/${local.base_prefix}/ | filter @message like /ERROR/"
-    recent_activity  = "fields @timestamp, @logGroup | filter @logGroup like /${local.base_prefix}/ | stats count() by @logGroup"
+  metric_query {
+    id = "e2"
+    
+    metric {
+      metric_name = "Errors"
+      namespace   = "AWS/Logs"
+      period      = "300"
+      stat        = "Sum"
+
+      dimensions = {
+        LogGroupName = "/aws/bedrock/flows/${local.base_prefix}"
+      }
+    }
   }
-  description = "Sample CloudWatch Insights queries for dashboards"
+
+  metric_query {
+    id = "error_rate"
+    expression = "(e1 + e2) / PERIOD(e1)"
+    label      = "Error Rate"
+    return_data = "true"
+  }
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+resource "aws_cloudwatch_metric_alarm" "bedrock_high_token_usage" {
+  count = var.enable_bedrock_dashboard && var.enable_bedrock_alarms ? 1 : 0
+
+  alarm_name          = "${local.base_prefix}-bedrock-high-token-usage"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "1"
+  metric_name         = "TokensUsed"
+  namespace           = "AWS/Bedrock"
+  period              = "3600" # 1 hour
+  statistic           = "Sum"
+  threshold           = var.bedrock_token_threshold
+  alarm_description   = "This metric monitors high token usage in Bedrock"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    ModelId = "all"
+  }
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+resource "aws_cloudwatch_metric_alarm" "bedrock_guardrail_violations" {
+  count = var.enable_bedrock_dashboard && var.enable_bedrock_alarms ? 1 : 0
+
+  alarm_name          = "${local.base_prefix}-bedrock-guardrail-violations"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "1"
+  threshold           = var.bedrock_guardrail_violation_threshold
+  alarm_description   = "This metric monitors Bedrock guardrail violations"
+  insufficient_data_actions = []
+
+  metric_query {
+    id = "violations"
+    
+    metric {
+      metric_name = "GuardrailViolations"
+      namespace   = "AWS/Logs"
+      period      = "300"
+      stat        = "Sum"
+
+      dimensions = {
+        LogGroupName = "/aws/bedrock/guardrails/${local.base_prefix}"
+      }
+    }
+    
+    return_data = "true"
+  }
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+resource "aws_cloudwatch_metric_alarm" "bedrock_knowledge_base_low_relevance" {
+  count = var.enable_bedrock_dashboard && var.enable_bedrock_alarms ? 1 : 0
+
+  alarm_name          = "${local.base_prefix}-bedrock-kb-low-relevance"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = "3"
+  threshold           = var.bedrock_relevance_threshold
+  alarm_description   = "This metric monitors low relevance scores in Knowledge Base retrievals"
+  treat_missing_data  = "notBreaching"
+
+  metric_query {
+    id = "relevance"
+    
+    metric {
+      metric_name = "RelevanceScore"
+      namespace   = "AWS/Logs"
+      period      = "900" # 15 minutes
+      stat        = "Average"
+
+      dimensions = {
+        LogGroupName = "/aws/bedrock/knowledge-bases/${local.base_prefix}"
+      }
+    }
+    
+    return_data = "true"
+  }
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+# Variables for dashboard configuration
+variable "enable_bedrock_dashboard" {
+  description = "Enable Bedrock AI usage monitoring dashboard"
+  type        = bool
+  default     = true
+}
+
+variable "enable_bedrock_alarms" {
+  description = "Enable CloudWatch alarms for Bedrock monitoring"
+  type        = bool
+  default     = true
+}
+
+variable "bedrock_error_threshold" {
+  description = "Threshold for Bedrock error rate alarm (errors per 5 minutes)"
+  type        = number
+  default     = 10
+}
+
+variable "bedrock_token_threshold" {
+  description = "Threshold for high token usage alarm (tokens per hour)"
+  type        = number
+  default     = 100000
+}
+
+variable "bedrock_guardrail_violation_threshold" {
+  description = "Threshold for guardrail violations alarm (violations per 5 minutes)"
+  type        = number
+  default     = 5
+}
+
+variable "bedrock_relevance_threshold" {
+  description = "Minimum relevance score threshold for Knowledge Base retrievals"
+  type        = number
+  default     = 0.7
 }
 ```
-
-### **Step 9: Verify No Hardcoded Log Group ARNs** 🔍
-
-Search your codebase for any hardcoded log group ARNs and update them:
-
-```bash
-# Run these commands in your terraform directory
-grep -r "log-group:" .
-grep -r "CreateLogGroup" .
-grep -r "/aws/glue" .
-grep -r "/aws/bedrock" .
-```
-
-### **Step 10: Test the Changes** 🧪
-
-1. **Run Terraform plan:**
-```bash
-terraform plan
-```
-
-2. **Verify no log groups are being destroyed** (except ones you don't need)
-
-3. **Check IAM policy updates:**
-```bash
-terraform plan -target=aws_iam_policy.lambda_exec_policy_base
-terraform plan -target=aws_iam_policy.glue_exec_policy_base
-terraform plan -target=aws_iam_policy.bedrock_service_policy
-```
-
-### **Step 11: Apply Changes** 🚀
-
-```bash
-# Apply in stages for safety
-terraform apply -target=aws_iam_policy.lambda_exec_policy_base
-terraform apply -target=aws_iam_policy.glue_exec_policy_base
-terraform apply -target=aws_iam_policy.bedrock_service_policy
-terraform apply -target=aws_iam_policy.lex_service_policy_base
-
-# Then apply remaining changes
-terraform apply
-```
-
-## 📋 Summary Checklist
-
-- [ ] Updated Lambda base policy to allow log group creation
-- [ ] Updated Glue policy to allow log group creation
-- [ ] Updated Bedrock service policy to allow log group creation
-- [ ] Updated Lex policy to allow log group creation
-- [ ] Added base_prefix parameter to all policy templates
-- [ ] Removed unnecessary log group ARN references from locals
-- [ ] Added helpful outputs for users
-- [ ] Tested with terraform plan
-- [ ] Applied changes
-
-## 🎯 Result
-
-After these changes:
-1. **Platform only manages** OpenSearch and optionally Lex conversation logs
-2. **Users create resources** with enforced prefix (via IAM)
-3. **AWS auto-creates** appropriate log groups
-4. **Dashboards work** by filtering on the prefix
-
-This is a much cleaner, maintenance-free approach! Let me know if you need clarification on any step.

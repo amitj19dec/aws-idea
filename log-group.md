@@ -278,58 +278,16 @@
 
 ## Code 
 ```
-# CloudWatch Log Groups for Bedrock Services
-resource "aws_cloudwatch_log_group" "bedrock_knowledge_bases_logs" {
-  count             = var.enable_bedrock_dashboard ? 1 : 0
-  name              = "/aws/bedrock/knowledge-bases/${local.base_prefix}"
-  retention_in_days = 30
-
-  tags = merge(
-    var.tags,
-    {
-      provisoner = local.resource_provisioner
-    }
-  )
-}
-
-resource "aws_cloudwatch_log_group" "bedrock_guardrails_logs" {
-  count             = var.enable_bedrock_dashboard ? 1 : 0
-  name              = "/aws/bedrock/guardrails/${local.base_prefix}"
-  retention_in_days = 30
-
-  tags = merge(
-    var.tags,
-    {
-      provisoner = local.resource_provisioner
-    }
-  )
-}
-
-resource "aws_cloudwatch_log_group" "bedrock_flows_logs" {
-  count             = var.enable_bedrock_dashboard ? 1 : 0
-  name              = "/aws/bedrock/flows/${local.base_prefix}"
-  retention_in_days = 30
-
-  tags = merge(
-    var.tags,
-    {
-      provisoner = local.resource_provisioner
-    }
-  )
-}
-
-resource "aws_cloudwatch_log_group" "bedrock_agents_logs" {
-  count             = var.enable_bedrock_dashboard ? 1 : 0
-  name              = "/aws/bedrock/agents/${local.base_prefix}"
-  retention_in_days = 30
-
-  tags = merge(
-    var.tags,
-    {
-      provisoner = local.resource_provisioner
-    }
-  )
-}
+# Note: Log groups are NOT pre-created here.
+# Bedrock services will create them dynamically when users create agents/flows/knowledge-bases/guardrails
+# with names like "${base_prefix}-my-agent", "${base_prefix}-my-flow", etc.
+# The IAM policy already grants permission to create log groups with the pattern:
+# /aws/bedrock/{service}/${base_prefix}-*
+#
+# For monitoring dynamically created log groups, consider:
+# 1. Using CloudWatch Logs Insights queries in the dashboard (which support wildcards)
+# 2. Creating a Lambda function to monitor new log groups and create metric filters
+# 3. Using AWS Config or EventBridge to track resource creation and setup monitoring
 
 # CloudWatch Dashboard for Bedrock AI Usage Monitoring
 resource "aws_cloudwatch_dashboard" "bedrock_ai_usage" {
@@ -350,16 +308,14 @@ resource "aws_cloudwatch_dashboard" "bedrock_ai_usage" {
       description = "Monitors comprehensive Bedrock AI usage across all services in the project"
     }
   )
-
-  depends_on = [
-    aws_cloudwatch_log_group.bedrock_agents_logs,
-    aws_cloudwatch_log_group.bedrock_flows_logs,
-    aws_cloudwatch_log_group.bedrock_knowledge_bases_logs,
-    aws_cloudwatch_log_group.bedrock_guardrails_logs
-  ]
 }
 
 # CloudWatch Alarms for Bedrock Monitoring
+# Note: These alarms use wildcard patterns in dimensions which may not work as expected.
+# CloudWatch metrics typically require exact log group names. For production use, consider:
+# 1. Creating alarms dynamically when resources are created
+# 2. Using CloudWatch Logs metric filters with exact log group names
+# 3. Using AWS Lambda to monitor log groups and create custom metrics
 resource "aws_cloudwatch_metric_alarm" "bedrock_high_error_rate" {
   count = var.enable_bedrock_dashboard && var.enable_bedrock_alarms ? 1 : 0
 
@@ -380,7 +336,7 @@ resource "aws_cloudwatch_metric_alarm" "bedrock_high_error_rate" {
       stat        = "Sum"
 
       dimensions = {
-        LogGroupName = "/aws/bedrock/agents/${local.base_prefix}"
+        LogGroupName = "/aws/bedrock/agents/${local.base_prefix}-*"
       }
     }
   }
@@ -395,7 +351,7 @@ resource "aws_cloudwatch_metric_alarm" "bedrock_high_error_rate" {
       stat        = "Sum"
 
       dimensions = {
-        LogGroupName = "/aws/bedrock/flows/${local.base_prefix}"
+        LogGroupName = "/aws/bedrock/flows/${local.base_prefix}-*"
       }
     }
   }
@@ -461,7 +417,7 @@ resource "aws_cloudwatch_metric_alarm" "bedrock_guardrail_violations" {
       stat        = "Sum"
 
       dimensions = {
-        LogGroupName = "/aws/bedrock/guardrails/${local.base_prefix}"
+        LogGroupName = "/aws/bedrock/guardrails/${local.base_prefix}-*"
       }
     }
     
@@ -496,7 +452,7 @@ resource "aws_cloudwatch_metric_alarm" "bedrock_knowledge_base_low_relevance" {
       stat        = "Average"
 
       dimensions = {
-        LogGroupName = "/aws/bedrock/knowledge-bases/${local.base_prefix}"
+        LogGroupName = "/aws/bedrock/knowledge-bases/${local.base_prefix}-*"
       }
     }
     
@@ -519,9 +475,9 @@ variable "enable_bedrock_dashboard" {
 }
 
 variable "enable_bedrock_alarms" {
-  description = "Enable CloudWatch alarms for Bedrock monitoring"
+  description = "Enable CloudWatch alarms for Bedrock monitoring (Note: requires exact log group names)"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "bedrock_error_threshold" {

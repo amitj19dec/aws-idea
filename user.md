@@ -1,3 +1,169 @@
+## Basic
+```
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "PlatformVPCResourcesRead",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeVpcs",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeVpcEndpoints",
+        "ec2:DescribeRouteTables",
+        "ec2:DescribeNetworkAcls"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "us-east-1"
+        },
+        "ForAllValues:StringLike": {
+          "ec2:ResourceTag/Name": "*uais-86ef73a8*"
+        }
+      }
+    },
+    {
+      "Sid": "PlatformS3BucketsRead",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetBucketLocation",
+        "s3:GetBucketVersioning",
+        "s3:GetBucketEncryption",
+        "s3:GetBucketLogging",
+        "s3:GetBucketAcl",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::uais-86ef73a8-workspace-bucket",
+        "arn:aws:s3:::uais-86ef73a8-byod-bucket",
+        "arn:aws:s3:::uais-86ef73a8-service-bucket"
+      ]
+    },
+    {
+      "Sid": "PlatformKMSRead",
+      "Effect": "Allow",
+      "Action": [
+        "kms:DescribeKey"
+      ],
+      "Resource": "arn:aws:kms:us-east-1:982534393096:key/*",
+      "Condition": {
+        "ForAllValues:StringLike": {
+          "kms:AliasName": "alias/uais-86ef73a8-*"
+        }
+      }
+    },
+    {
+      "Sid": "PlatformKMSListAliases",
+      "Effect": "Allow",
+      "Action": [
+        "kms:ListAliases"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "PlatformECRRead",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:DescribeRepositories",
+        "ecr:DescribeImages",
+        "ecr:GetRepositoryPolicy"
+      ],
+      "Resource": "arn:aws:ecr:us-east-1:982534393096:repository/uais-86ef73a8-ecr"
+    },
+    {
+      "Sid": "PlatformSageMakerRead",
+      "Effect": "Allow",
+      "Action": [
+        "sagemaker:DescribeDomain",
+        "sagemaker:DescribeUserProfile",
+        "sagemaker:ListDomains",
+        "sagemaker:ListUserProfiles"
+      ],
+      "Resource": [
+        "arn:aws:sagemaker:us-east-1:982534393096:domain/uais-86ef73a8-*",
+        "arn:aws:sagemaker:us-east-1:982534393096:user-profile/uais-86ef73a8-*/*"
+      ]
+    },
+    {
+      "Sid": "PlatformOpenSearchRead",
+      "Effect": "Allow",
+      "Action": [
+        "es:DescribeDomain",
+        "es:DescribeDomains",
+        "es:DescribeDomainConfig",
+        "es:ListDomainNames",
+        "aoss:BatchGetCollection",
+        "aoss:ListCollections"
+      ],
+      "Resource": [
+        "arn:aws:es:us-east-1:982534393096:domain/uais-86ef73a8-*",
+        "arn:aws:aoss:us-east-1:982534393096:collection/uais-86ef73a8-*"
+      ]
+    },
+    {
+      "Sid": "PlatformIAMRolesRead",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetRole",
+        "iam:ListAttachedRolePolicies"
+      ],
+      "Resource": [
+        "arn:aws:iam::982534393096:role/uais-86ef73a8-*"
+      ]
+    },
+    {
+      "Sid": "PlatformParameterStoreRead",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParameter",
+        "ssm:GetParameters",
+        "ssm:GetParametersByPath",
+        "ssm:DescribeParameters"
+      ],
+      "Resource": "arn:aws:ssm:us-east-1:982534393096:parameter/params/uais-86ef73a8/platform/*"
+    },
+    {
+      "Sid": "PlatformGlueRead",
+      "Effect": "Allow",
+      "Action": [
+        "glue:GetDatabase",
+        "glue:GetDatabases",
+        "glue:GetTable",
+        "glue:GetTables"
+      ],
+      "Resource": [
+        "arn:aws:glue:us-east-1:982534393096:catalog",
+        "arn:aws:glue:us-east-1:982534393096:database/uais-86ef73a8-*",
+        "arn:aws:glue:us-east-1:982534393096:table/uais-86ef73a8-*/*"
+      ]
+    },
+    {
+      "Sid": "PlatformCloudWatchLogsRead",
+      "Effect": "Allow",
+      "Action": [
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams"
+      ],
+      "Resource": [
+        "arn:aws:logs:us-east-1:982534393096:log-group:/aws/sagemaker/domains/uais-86ef73a8-*",
+        "arn:aws:logs:us-east-1:982534393096:log-group:/aws/opensearch/domains/uais-86ef73a8-*",
+        "arn:aws:logs:us-east-1:982534393096:log-group:/aws/lex/uais-86ef73a8-*"
+      ]
+    },
+    {
+      "Sid": "GeneralAWSServiceDiscovery",
+      "Effect": "Allow",
+      "Action": [
+        "sts:GetCallerIdentity"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
 ## Lex
 ```
 {

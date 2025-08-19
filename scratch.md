@@ -1,3 +1,166 @@
+## new code
+```
+import json
+import boto3
+import re
+import logging
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+def lambda_handler(event, context):
+    try:
+        detail = event['detail']
+        event_name = detail['eventName']
+        request_parameters = detail['requestParameters']
+        response_elements = detail['responseElements']
+        user_identity = detail['userIdentity']
+        aws_region = detail['awsRegion']
+        
+        logger.info(f"Processing event: {event_name}")
+        
+        # Step 1: Extract base_prefix from roleArn or derive from user identity
+        base_prefix = None
+        role_arn = request_parameters.get('roleArn')
+        
+        if role_arn:
+            # Extract role name: uais-{base_prefix}-lex-service-role
+            role_name = role_arn.split('/')[-1]
+            lex_role_pattern = r'^uais-([a-f0-9]{8})-lex-service-role$'
+            match = re.match(lex_role_pattern, role_name)
+            
+            if match:
+                base_prefix = match.group(1)
+                logger.info(f"Extracted base_prefix from roleArn: {base_prefix}")
+        
+        # Fallback: Extract base_prefix from user ARN for events without roleArn
+        if not base_prefix:
+            user_arn = user_identity.get('arn', '')
+            # Pattern: AWSReservedSSO_{account_id}_uais_{base_prefix}
+            sso_pattern = r'AWSReservedSSO_\d+_uais_([a-f0-9]{8})'
+            match = re.search(sso_pattern, user_arn)
+            
+            if match:
+                base_prefix = match.group(1)
+                logger.info(f"Extracted base_prefix from user ARN: {base_prefix}")
+            else:
+                logger.warning(f"Could not extract base_prefix from user ARN: {user_arn}")
+                return {'statusCode': 200, 'body': 'Could not extract base_prefix'}
+        
+        # Step 2: Get account ID from userIdentity
+        account_id = user_identity.get('accountId')
+        if not account_id:
+            logger.error("No accountId found in userIdentity")
+            return {'statusCode': 400, 'body': 'No accountId found'}
+        
+        # Step 3: Check authorization
+        user_arn = user_identity.get('arn', '')
+        
+        # Condition 1: SSO user pattern
+        sso_pattern = f"AWSReservedSSO_{account_id}_uais_{base_prefix}"
+        
+        # Condition 2: Lambda service role pattern  
+        lambda_role_pattern = f"uais-{base_prefix}-lambda-exec-role"
+        
+        is_authorized = (sso_pattern in user_arn) or (lambda_role_pattern in user_arn)
+        
+        if not is_authorized:
+            logger.warning(f"User {user_arn} not authorized for project {base_prefix}")
+            return {'statusCode': 403, 'body': 'Not authorized'}
+        
+        logger.info(f"User authorized. Proceeding with tagging for project: {base_prefix}")
+        
+        # Step 4: Handle different event types
+        if event_name == 'StartImport':
+            # For StartImport, we can't tag immediately because there's no botId yet
+            # Store the import info for later processing when import completes
+            import_id = response_elements.get('importId')
+            logger.info(f"Import started with ID: {import_id}. Tagging will occur when import completes.")
+            
+            # Return success but note that tagging is deferred
+            return {
+                'statusCode': 200,
+                'body': json.dumps({
+                    'message': 'Import started, tagging deferred until completion',
+                    'import_id': import_id,
+                    'base_prefix': base_prefix
+                })
+            }
+        
+        # Step 5: Construct Lex ARN for immediate tagging events
+        lex_arn = None
+        
+        if event_name in ['CreateBot', 'ImportResourceCompleted']:
+            bot_id = response_elements.get('botId')
+            if bot_id:
+                lex_arn = f"arn:aws:lex:{aws_region}:{account_id}:bot:{bot_id}"
+        
+        elif event_name == 'CreateBotVersion':
+            bot_id = response_elements.get('botId')
+            bot_version = response_elements.get('botVersion')
+            if bot_id and bot_version:
+                lex_arn = f"arn:aws:lex:{aws_region}:{account_id}:bot:{bot_id}:{bot_version}"
+        
+        elif event_name == 'CreateBotAlias':
+            bot_id = response_elements.get('botId')
+            bot_alias_id = response_elements.get('botAliasId')
+            if bot_id and bot_alias_id:
+                lex_arn = f"arn:aws:lex:{aws_region}:{account_id}:bot-alias:{bot_id}:{bot_alias_id}"
+        
+        if not lex_arn:
+            logger.error(f"Could not construct Lex ARN for event {event_name}")
+            return {'statusCode': 400, 'body': 'Could not construct ARN'}
+        
+        # Step 6: Apply the tag
+        lex_client = boto3.client('lex', region_name=aws_region)
+        project_alias_tag = f"uais-{base_prefix}"
+        
+        try:
+            lex_client.tag_resource(
+                resourceArn=lex_arn,
+                tags={'project-alias': project_alias_tag}
+            )
+            
+            logger.info(f"Successfully tagged {lex_arn} with project-alias: {project_alias_tag}")
+            
+            return {
+                'statusCode': 200,
+                'body': json.dumps({
+                    'message': 'Successfully tagged Lex resource',
+                    'lex_arn': lex_arn,
+                    'project_alias': project_alias_tag
+                })
+            }
+        except Exception as tag_error:
+            logger.error(f"Failed to tag resource {lex_arn}: {str(tag_error)}")
+            return {'statusCode': 500, 'body': f'Tagging failed: {str(tag_error)}'}
+        
+    except Exception as e:
+        logger.error(f"Error processing event: {str(e)}")
+        return {'statusCode': 500, 'body': f'Error: {str(e)}'}
+
+
+def extract_base_prefix_from_import_event(event):
+    """
+    Alternative approach: Extract base_prefix from import events
+    using the resourceSpecification if available
+    """
+    try:
+        resource_spec = event['detail']['requestParameters'].get('resourceSpecification', {})
+        bot_import_spec = resource_spec.get('botImportSpecification', {})
+        role_arn = bot_import_spec.get('roleArn')
+        
+        if role_arn:
+            role_name = role_arn.split('/')[-1]
+            lex_role_pattern = r'^uais-([a-f0-9]{8})-lex-service-role$'
+            match = re.match(lex_role_pattern, role_name)
+            if match:
+                return match.group(1)
+    except:
+        pass
+    return None
+```
+
 ## bot import 
 ```
 {

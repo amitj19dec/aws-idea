@@ -1,3 +1,54 @@
+## bot alias
+```
+{
+    "eventVersion": "1.09",
+    "userIdentity": {
+        "type": "AssumedRole",
+        "principalId": "AROA6JQ45BUEHHME4SR22:ajaisw49@optumcloud.com",
+        "arn": "arn:aws:sts::982534393096:assumed-role/AWSReservedSSO_982534393096_uais_86ef73a8_92ad32004229c5b2/ajaisw49@optumcloud.com",
+        "accountId": "982534393096",
+        "accessKeyId": "ASIA6JQ45BUEI7NLJPOB",
+        "sessionContext": {
+            "sessionIssuer": {
+                "type": "Role",
+                "principalId": "AROA6JQ45BUEHHME4SR22",
+                "arn": "arn:aws:iam::982534393096:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_982534393096_uais_86ef73a8_92ad32004229c5b2",
+                "accountId": "982534393096",
+                "userName": "AWSReservedSSO_982534393096_uais_86ef73a8_92ad32004229c5b2"
+            },
+            "attributes": {
+                "creationDate": "2025-08-19T04:49:53Z",
+                "mfaAuthenticated": "false"
+            }
+        }
+    },
+    "eventTime": "2025-08-19T04:59:17Z",
+    "eventSource": "lex.amazonaws.com",
+    "eventName": "CreateBotAlias",
+    "awsRegion": "us-east-1",
+    "sourceIPAddress": "198.203.181.181",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "requestParameters": {
+        "botId": "6JK3M1NPPW",
+        "botAliasName": "test-alias-19aug"
+    },
+    "responseElements": {
+        "botAliasId": "GDEU1GZ7G0",
+        "botAliasName": "test-alias-19aug",
+        "botId": "6JK3M1NPPW",
+        "botAliasStatus": "Creating",
+        "creationDateTime": 1755579557.634
+    },
+    "requestID": "2d810446-f7bd-4835-8e4d-4367d9dd5901",
+    "eventID": "4e2f5b62-0507-4177-85c2-af646acca6b2",
+    "readOnly": false,
+    "eventType": "AwsApiCall",
+    "managementEvent": true,
+    "recipientAccountId": "982534393096",
+    "eventCategory": "Management"
+}
+```
+
 ## base/lambda_lex_tagger.tf
 ```
 # EventBridge Rule to capture Lex bot creation events

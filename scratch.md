@@ -1,3 +1,77 @@
+## bot import 
+```
+{
+    "eventVersion": "1.09",
+    "userIdentity": {
+        "type": "AssumedRole",
+        "principalId": "AROA6JQ45BUEHHME4SR22:ajaisw49@optumcloud.com",
+        "arn": "arn:aws:sts::982534393096:assumed-role/AWSReservedSSO_982534393096_uais_86ef73a8_92ad32004229c5b2/ajaisw49@optumcloud.com",
+        "accountId": "982534393096",
+        "accessKeyId": "ASIA6JQ45BUECWYY72VS",
+        "sessionContext": {
+            "sessionIssuer": {
+                "type": "Role",
+                "principalId": "AROA6JQ45BUEHHME4SR22",
+                "arn": "arn:aws:iam::982534393096:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_982534393096_uais_86ef73a8_92ad32004229c5b2",
+                "accountId": "982534393096",
+                "userName": "AWSReservedSSO_982534393096_uais_86ef73a8_92ad32004229c5b2"
+            },
+            "attributes": {
+                "creationDate": "2025-08-19T04:49:53Z",
+                "mfaAuthenticated": "false"
+            }
+        }
+    },
+    "eventTime": "2025-08-19T05:24:37Z",
+    "eventSource": "lex.amazonaws.com",
+    "eventName": "StartImport",
+    "awsRegion": "us-east-1",
+    "sourceIPAddress": "198.203.177.177",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "requestParameters": {
+        "resourceSpecification": {
+            "botImportSpecification": {
+                "botName": "test",
+                "roleArn": "arn:aws:iam::982534393096:role/uais-86ef73a8-lex-service-role",
+                "dataPrivacy": {
+                    "childDirected": false
+                },
+                "errorLogSettings": {
+                    "enabled": false
+                }
+            }
+        },
+        "importId": "0TG5FTWWRM",
+        "mergeStrategy": "FailOnConflict"
+    },
+    "responseElements": {
+        "resourceSpecification": {
+            "botImportSpecification": {
+                "botName": "test",
+                "dataPrivacy": {
+                    "childDirected": false
+                },
+                "errorLogSettings": {
+                    "enabled": false
+                },
+                "roleArn": "arn:aws:iam::982534393096:role/uais-86ef73a8-lex-service-role"
+            }
+        },
+        "importStatus": "InProgress",
+        "importId": "0TG5FTWWRM",
+        "mergeStrategy": "FailOnConflict",
+        "creationDateTime": 1755581077.557
+    },
+    "requestID": "8048e5b6-0e23-4575-a5f8-704355818f8d",
+    "eventID": "d911155c-16e6-44ff-99c2-6e79da78db6e",
+    "readOnly": false,
+    "eventType": "AwsApiCall",
+    "managementEvent": true,
+    "recipientAccountId": "982534393096",
+    "eventCategory": "Management"
+}
+```
+
 ## bot version
 ```
 {

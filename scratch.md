@@ -1,3 +1,200 @@
+## base/lambda_lex_tagger.tf
+```
+# EventBridge Rule to capture Lex bot creation events
+resource "aws_cloudwatch_event_rule" "lex_bot_creation" {
+  name        = "${local.base_prefix}-lex-bot-tagging"
+  description = "Capture Lex bot creation events for auto-tagging"
+  
+  event_pattern = jsonencode({
+    source      = ["aws.lex"]
+    detail-type = ["AWS API Call via CloudTrail"]
+    detail = {
+      eventSource = ["lex.amazonaws.com"]
+      eventName   = ["CreateBot", "CreateBotVersion", "CreateBotAlias", "ImportBot"]
+    }
+  })
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+# Lambda function package
+data "archive_file" "lex_tagger_zip" {
+  type        = "zip"
+  output_path = "${path.module}/lex_tagger.zip"
+  source {
+    content = <<EOF
+import json
+import boto3
+import re
+import logging
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+def lambda_handler(event, context):
+    try:
+        detail = event['detail']
+        event_name = detail['eventName']
+        request_parameters = detail['requestParameters']
+        response_elements = detail['responseElements']
+        user_identity = detail['userIdentity']
+        aws_region = detail['awsRegion']
+        
+        # Step 1: Extract base_prefix from roleArn
+        role_arn = request_parameters.get('roleArn')
+        if not role_arn:
+            logger.info("No roleArn found in request parameters")
+            return {'statusCode': 200, 'body': 'No roleArn found'}
+        
+        # Extract role name: uais-{base_prefix}-lex-service-role
+        role_name = role_arn.split('/')[-1]
+        lex_role_pattern = r'^uais-([a-f0-9]{8})-lex-service-role$'
+        match = re.match(lex_role_pattern, role_name)
+        
+        if not match:
+            logger.info(f"Role {role_name} doesn't match pattern uais-{{base_prefix}}-lex-service-role")
+            return {'statusCode': 200, 'body': 'Role pattern not matched'}
+        
+        base_prefix = match.group(1)
+        logger.info(f"Extracted base_prefix: {base_prefix}")
+        
+        # Step 2: Get account ID from userIdentity
+        account_id = user_identity.get('accountId')
+        if not account_id:
+            logger.error("No accountId found in userIdentity")
+            return {'statusCode': 400, 'body': 'No accountId found'}
+        
+        # Step 3: Check authorization
+        user_arn = user_identity.get('arn', '')
+        
+        # Condition 1: SSO user pattern
+        sso_pattern = f"AWSReservedSSO_{account_id}_uais_{base_prefix}"
+        
+        # Condition 2: Lambda service role pattern  
+        lambda_role_pattern = f"uais-{base_prefix}-lambda-exec-role"
+        
+        is_authorized = (sso_pattern in user_arn) or (lambda_role_pattern in user_arn)
+        
+        if not is_authorized:
+            logger.warning(f"User {user_arn} not authorized for project {base_prefix}")
+            return {'statusCode': 403, 'body': 'Not authorized'}
+        
+        logger.info(f"User authorized. Proceeding with tagging for project: {base_prefix}")
+        
+        # Step 4: Construct Lex ARN based on event type
+        lex_arn = None
+        
+        if event_name in ['CreateBot', 'ImportBot']:
+            bot_id = response_elements.get('botId')
+            if bot_id:
+                lex_arn = f"arn:aws:lex:{aws_region}:{account_id}:bot:{bot_id}"
+        
+        elif event_name == 'CreateBotVersion':
+            bot_id = response_elements.get('botId')
+            bot_version = response_elements.get('botVersion')
+            if bot_id and bot_version:
+                lex_arn = f"arn:aws:lex:{aws_region}:{account_id}:bot:{bot_id}:{bot_version}"
+        
+        elif event_name == 'CreateBotAlias':
+            bot_id = response_elements.get('botId')
+            bot_alias_id = response_elements.get('botAliasId')
+            if bot_id and bot_alias_id:
+                lex_arn = f"arn:aws:lex:{aws_region}:{account_id}:bot-alias:{bot_id}:{bot_alias_id}"
+        
+        if not lex_arn:
+            logger.error(f"Could not construct Lex ARN for event {event_name}")
+            return {'statusCode': 400, 'body': 'Could not construct ARN'}
+        
+        # Step 5: Apply the tag
+        lex_client = boto3.client('lex', region_name=aws_region)
+        project_alias_tag = f"uais-{base_prefix}"
+        
+        lex_client.tag_resource(
+            resourceArn=lex_arn,
+            tags={'project-alias': project_alias_tag}
+        )
+        
+        logger.info(f"Successfully tagged {lex_arn} with project-alias: {project_alias_tag}")
+        
+        return {
+            'statusCode': 200,
+            'body': json.dumps({
+                'message': 'Successfully tagged Lex resource',
+                'lex_arn': lex_arn,
+                'project_alias': project_alias_tag
+            })
+        }
+        
+    except Exception as e:
+        logger.error(f"Error processing event: {str(e)}")
+        return {'statusCode': 500, 'body': f'Error: {str(e)}'}
+EOF
+    filename = "lambda_function.py"
+  }
+}
+
+# Lambda function
+resource "aws_lambda_function" "lex_tagger" {
+  filename         = data.archive_file.lex_tagger_zip.output_path
+  function_name    = "${local.base_prefix}-lex-auto-tagger"
+  role            = aws_iam_role.lambda_exec_role.arn
+  handler         = "lambda_function.lambda_handler"
+  runtime         = "python3.9"
+  timeout         = 60
+  source_code_hash = data.archive_file.lex_tagger_zip.output_base64sha256
+
+  vpc_config {
+    subnet_ids         = values({ for k, v in module.spoke_vpc.private_subnet_attributes_by_az : split("/", k)[1] => v.id if split("/", k)[0] == "endpoints_subnet" })
+    security_group_ids = [aws_security_group.lambda_sg.id]
+  }
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+
+  depends_on = [aws_cloudwatch_log_group.lex_tagger_logs]
+}
+
+# CloudWatch Log Group
+resource "aws_cloudwatch_log_group" "lex_tagger_logs" {
+  name              = "/aws/lambda/${local.base_prefix}-lex-auto-tagger"
+  retention_in_days = 7
+
+  tags = merge(
+    var.tags,
+    {
+      provisoner = local.resource_provisioner
+    }
+  )
+}
+
+# EventBridge target
+resource "aws_cloudwatch_event_target" "lambda_target" {
+  rule      = aws_cloudwatch_event_rule.lex_bot_creation.name
+  target_id = "LexTaggerLambdaTarget"
+  arn       = aws_lambda_function.lex_tagger.arn
+}
+
+# Lambda permission for EventBridge
+resource "aws_lambda_permission" "eventbridge_invoke" {
+  statement_id  = "AllowExecutionFromEventBridge"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.lex_tagger.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.lex_bot_creation.arn
+}
+```
+
+
+
 ```
 {
     "eventVersion": "1.09",
